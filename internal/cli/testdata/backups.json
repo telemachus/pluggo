@@ -1,0 +1,16 @@
+{
+    "repos": [
+        {
+            "name": "foo.git",
+            "url": "https://github.com/foo/foo.git"
+        },
+        {
+            "name": "bar.git",
+            "url": "https://github.com/bar/bar.git"
+        },
+        {
+            "name": "random.git",
+            "url": "https://example.com/buzz/fizz.git"
+        }
+    ]
+}

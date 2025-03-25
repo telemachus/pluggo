@@ -1,0 +1,95 @@
+linters-settings:
+  cyclop:
+    max-complexity: 12
+    package-average: 0.0
+    skip-tests: false
+  copyloopvar:
+    check-alias: true
+  depguard:
+      rules:
+        main:
+          files:
+            - $all
+          deny:
+            - pkg: reflect
+              desc: "avoid reflect"
+        test:
+          files:
+            - $all
+          deny:
+            - pkg: reflect
+              desc: "avoid reflect"
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - fmt.Printf
+      - fmt.Println
+      - fmt.Fprintf
+      - fmt.Fprintln
+  exhaustive:
+    default-signifies-exhaustive: true
+  goconst:
+    min-len: 2
+    min-occurrences: 3
+  gocritic:
+    disabled-checks:
+      - hugeParam
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+  govet:
+    enable-all: true
+    shadow:
+      strict: true
+  nolintlint:
+    require-explanation: true
+    require-specific: true
+
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - copyloopvar
+    - cyclop
+    - depguard
+    - dogsled
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - goconst
+    - gocritic
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - ireturn
+    - maintidx
+    - misspell
+    - nolintlint
+    - nakedret
+    - prealloc
+    - predeclared
+    - stylecheck
+    - thelper
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+
+run:
+  concurrency: 8
+  issues-exit-code: 1
+  timeout: 30m
+  tests: true
+  allow-parallel-runners: false
+
+issues:
+  exclude-dirs:
+    - internal
