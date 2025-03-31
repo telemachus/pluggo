@@ -4,30 +4,37 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/telemachus/pluggo/internal/git"
 )
 
 func subCmdUpdate(cmd *cmdEnv) {
 	if err := cmd.subCmdFrom(cmd.subCmdArgs); err != nil {
-		fmt.Fprintf(os.Stderr, "%s %s: %s\n", cmd.name, cmd.subCmdName, err)
+		fmt.Fprintf(
+			os.Stderr,
+			"%s %s: %s\n",
+			cmd.name,
+			cmd.subCmdName,
+			err,
+		)
+
 		return
 	}
-	rs := cmd.repos()
-	cmd.update(rs)
+
+	plugins := cmd.plugins()
+	cmd.update(plugins)
 }
 
-func (cmd *cmdEnv) update(rs []Repo) {
+func (cmd *cmdEnv) update(plugins []Plugin) {
 	if cmd.noOp() {
 		return
 	}
 
 	ch := make(chan result)
-	for _, r := range rs {
-		go cmd.updateOne(r, ch)
+	for _, plugin := range plugins {
+		go cmd.updateOne(plugin, ch)
 	}
-	for range rs {
+	for range plugins {
 		res := <-ch
 		switch cmd.quietWanted {
 		case true:
@@ -38,52 +45,71 @@ func (cmd *cmdEnv) update(rs []Repo) {
 	}
 }
 
-func (cmd *cmdEnv) updateOne(r Repo, ch chan<- result) {
-	rDir := filepath.Join(cmd.dataDir, r.Name)
-	fhBefore, err := git.NewFetchHead(filepath.Join(rDir, "FETCH_HEAD"))
+func (cmd *cmdEnv) updateOne(plugin Plugin, ch chan<- result) {
+	pluginDir := plugin.fullPath(cmd.dataDir)
+
+	digestBefore, err := git.HeadDigest(pluginDir)
 	if err != nil {
 		ch <- result{
 			isErr: true,
-			msg:   fmt.Sprintf("%s %s: %s: %s", cmd.name, cmd.subCmdName, r.Name, err),
+			msg: fmt.Sprintf(
+				"%s %s: %s: %s",
+				cmd.name,
+				cmd.subCmdName,
+				plugin.Name,
+				err,
+			),
 		}
+
 		return
 	}
 
-	args := []string{"remote", "update"}
+	args := []string{"-C", pluginDir, "pull", "--recurse-submodules"}
 	gitCmd := exec.Command("git", args...)
-	noGitPrompt := "GIT_TERMINAL_PROMPT=0"
-	env := append(os.Environ(), noGitPrompt)
-	gitCmd.Env = env
-	gitCmd.Dir = rDir
 
 	err = gitCmd.Run()
 	if err != nil {
 		ch <- result{
 			isErr: true,
-			msg:   fmt.Sprintf("%s %s: %s: %s", cmd.name, cmd.subCmdName, r.Name, err),
+			msg: fmt.Sprintf(
+				"%s %s: %s: %s",
+				cmd.name,
+				cmd.subCmdName,
+				plugin.Name,
+				err,
+			),
 		}
+
 		return
 	}
 
-	fhAfter, err := git.NewFetchHead(filepath.Join(rDir, "FETCH_HEAD"))
+	digestAfter, err := git.HeadDigest(pluginDir)
 	if err != nil {
 		ch <- result{
 			isErr: true,
-			msg:   fmt.Sprintf("%s %s: %s: %s", cmd.name, cmd.subCmdName, r.Name, err),
+			msg: fmt.Sprintf(
+				"%s %s: %s: %s",
+				cmd.name,
+				cmd.subCmdName,
+				plugin.Name,
+				err,
+			),
 		}
+
 		return
 	}
 
-	if fhBefore.Equals(fhAfter) {
+	if digestBefore.Equals(digestAfter) {
 		ch <- result{
 			isErr: false,
-			msg:   fmt.Sprintf("%s: already up-to-date", r.Name),
+			msg:   fmt.Sprintf("%s: already up-to-date", plugin.Name),
 		}
+
 		return
 	}
 
 	ch <- result{
 		isErr: false,
-		msg:   fmt.Sprintf("%s: updated", r.Name),
+		msg:   fmt.Sprintf("%s: updated", plugin.Name),
 	}
 }

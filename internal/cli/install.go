@@ -12,27 +12,31 @@ func subCmdInstall(cmd *cmdEnv) {
 		return
 	}
 
-	rs := cmd.repos()
-	cmd.install(rs)
+	plugins := cmd.plugins()
+	cmd.install(plugins)
 }
 
-func (cmd *cmdEnv) install(rs []Repo) {
+func (cmd *cmdEnv) install(plugins []Plugin) {
 	if cmd.noOp() {
 		return
 	}
 
-	// err := os.MkdirAll(cmd.dataDir, os.ModePerm)
-	// if err != nil {
-	// 	fmt.Fprintf(os.Stderr, "%s %s: %s\n", cmd.name, cmd.subCmdName, err)
-	// 	cmd.exitVal = exitFailure
-	// 	return
-	// }
+	// Strictly speaking, this is unnecessary since git itself will create
+	// directories as needed. However, if permissions prevent creating
+	// a parent directory, then the tool will uselessly exec git and try to
+	// clone plugin after plugin. This way, I bail out early.
+	err := os.MkdirAll(cmd.dataDir, os.ModePerm)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s %s: %s\n", cmd.name, cmd.subCmdName, err)
+		cmd.exitVal = exitFailure
+		return
+	}
 
 	ch := make(chan result)
-	for _, r := range rs {
-		go cmd.installOne(r, ch)
+	for _, plugin := range plugins {
+		go cmd.installOne(plugin, ch)
 	}
-	for range rs {
+	for range plugins {
 		res := <-ch
 		switch cmd.quietWanted {
 		case true:
@@ -43,40 +47,48 @@ func (cmd *cmdEnv) install(rs []Repo) {
 	}
 }
 
-func (cmd *cmdEnv) installOne(r Repo, ch chan<- result) {
+func (cmd *cmdEnv) installOne(plugin Plugin, ch chan<- result) {
 	// Normally, it is a bad idea to check whether a directory exists
 	// before trying an operation. However, this case is an exception.
-	// git clone will retrun an error if a repo with that name in that
+	// git clone will return an error if a repo with that name in that
 	// location already exists. But for the purpose of this command, there
 	// is no error. If a directory with the repo's name exists, I simply
 	// want to skip that repo.
-	repoFullPath := r.fullPath(cmd.dataDir)
-	if _, err := os.Stat(repoFullPath); err == nil {
+	pluginFullPath := plugin.fullPath(cmd.dataDir)
+	if _, err := os.Stat(pluginFullPath); err == nil {
 		ch <- result{
 			isErr: false,
-			msg:   fmt.Sprintf("%s: %s is already installed", cmd.name, cmd.prettyPath(repoFullPath)),
+			msg: fmt.Sprintf(
+				"%s: %s already present in %s",
+				cmd.name,
+				plugin.Name,
+				cmd.prettyPath(cmd.dataDir),
+			),
 		}
 		return
 	}
 
-	args := r.installArgs(repoFullPath)
+	args := plugin.installArgs(pluginFullPath)
 	gitCmd := exec.Command("git", args...)
-	// noGitPrompt := "GIT_TERMINAL_PROMPT=0"
-	// env := append(os.Environ(), noGitPrompt)
-	// gitCmd.Env = env
 
 	err := gitCmd.Run()
 	if err != nil {
 		cmd.exitVal = exitFailure
 		ch <- result{
 			isErr: true,
-			msg:   fmt.Sprintf("%s %s: %s: %s", cmd.name, cmd.subCmdName, r.Name, err),
+			msg: fmt.Sprintf(
+				"%s %s: %s: %s",
+				cmd.name,
+				cmd.subCmdName,
+				plugin.Name,
+				err,
+			),
 		}
 		return
 	}
 
 	ch <- result{
 		isErr: false,
-		msg:   fmt.Sprintf("%s: %s installed", "pluggo", r.Name),
+		msg:   fmt.Sprintf("%s: %s installed", "pluggo", plugin.Name),
 	}
 }

@@ -1,5 +1,5 @@
 {
-    "repos": [
+    "plugins": [
         {
             "name": "foo.git",
             "url": "https://github.com/foo/foo.git"

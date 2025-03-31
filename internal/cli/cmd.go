@@ -140,7 +140,7 @@ func (cmd *cmdEnv) prettyPath(s string) string {
 	return strings.Replace(s, cmd.homeDir, "~", 1)
 }
 
-func (cmd *cmdEnv) repos() []Repo {
+func (cmd *cmdEnv) plugins() []Plugin {
 	if cmd.noOp() {
 		return nil
 	}
@@ -153,9 +153,9 @@ func (cmd *cmdEnv) repos() []Repo {
 	}
 
 	cfg := struct {
-		Repos []Repo `json:"repos"`
+		Plugins []Plugin `json:"plugins"`
 	}{
-		Repos: make([]Repo, 0, 20),
+		Plugins: make([]Plugin, 0, 20),
 	}
 	err = json.Unmarshal(conf, &cfg)
 	if err != nil {
@@ -165,8 +165,8 @@ func (cmd *cmdEnv) repos() []Repo {
 	}
 
 	// Every repository must have a URL and a directory name.
-	return slices.DeleteFunc(cfg.Repos, func(r Repo) bool {
-		return r.URL == "" || r.Name == ""
+	return slices.DeleteFunc(cfg.Plugins, func(plugin Plugin) bool {
+		return plugin.URL == "" || plugin.Name == ""
 	})
 }
 
@@ -177,9 +177,10 @@ func validate(extra []string) error {
 
 	// The only recognized subcommands are clone, up(date), and sync.
 	recognized := map[string]struct{}{
-		"clone":   {},
 		"install": {},
 		"sync":    {},
+		"up":      {},
+		"update":  {},
 	}
 	if _, ok := recognized[extra[0]]; !ok {
 		return fmt.Errorf("unrecognized subcommand: %q", extra[0])
