@@ -38,7 +38,7 @@ func branchRef(headFile string) (string, error) {
 	}
 
 	data = bytes.TrimPrefix(data, []byte("ref: "))
-	data = bytes.TrimSuffix(data, []byte{'\n'})
+	data = trimLineEnds(data)
 
 	return string(data), nil
 }
@@ -50,4 +50,11 @@ func digestFrom(branchRef string) (Digest, error) {
 	}
 
 	return Digest(data), nil
+}
+
+func trimLineEnds(data []byte) []byte {
+	data = bytes.ReplaceAll(data, []byte("\n"), []byte(""))
+	data = bytes.ReplaceAll(data, []byte("\r"), []byte(""))
+
+	return data
 }
