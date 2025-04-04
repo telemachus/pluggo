@@ -11,6 +11,15 @@ type Plugin struct {
 	Pin    bool
 }
 
+// PluginState stores the state of a plugin.
+type PluginState struct {
+	Name      string `json:"name"`
+	Directory string `json:"dir"`
+	URL       string `json:"url"`
+	Branch    string `json:"branch,omitempty"`
+	Hash      string `json:"hash"`
+}
+
 func (plugin *Plugin) fullPath(dataDir string) string {
 	switch plugin.Opt {
 	case true:

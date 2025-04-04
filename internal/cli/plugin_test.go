@@ -16,10 +16,8 @@ func makePlugins() []Plugin {
 
 func fakeCmdEnv(confFile string) *cmdEnv {
 	return &cmdEnv{
-		name:       "test",
-		subCmdName: "testing",
-		confFile:   confFile,
-		exitVal:    exitSuccess,
+		name:     "test",
+		confFile: confFile,
 	}
 }
 
@@ -28,8 +26,8 @@ func TestGetPluginsSuccess(t *testing.T) {
 	confFile := "testdata/plugins.json"
 	cmd := fakeCmdEnv(confFile)
 
-	actual := cmd.plugins()
-	if cmd.exitVal != exitSuccess {
+	actual, err := cmd.plugins()
+	if err != nil {
 		t.Fatal("test cannot finish since cmd.plugins() failed")
 	}
 
@@ -40,10 +38,10 @@ func TestGetPluginsSuccess(t *testing.T) {
 
 func TestGetPluginsFailure(t *testing.T) {
 	cmd := fakeCmdEnv("testdata/nope.json")
-	cmd.plugins()
+	_, err := cmd.plugins()
 
-	if cmd.exitVal != exitFailure {
-		t.Error("cmd.exitVal expected exitFailure; actual exitSuccess")
+	if err == nil {
+		t.Error("err == nil; expected non-nil error")
 	}
 }
 
@@ -51,8 +49,8 @@ func TestRepoChecks(t *testing.T) {
 	confFile := "testdata/plugin-checks.json"
 	cmd := fakeCmdEnv(confFile)
 
-	actual := cmd.plugins()
-	if cmd.exitVal != exitSuccess {
+	actual, err := cmd.plugins()
+	if err != nil {
 		t.Fatal("test cannot finish since cmd.plugins() failed")
 	}
 
