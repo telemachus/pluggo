@@ -3,6 +3,7 @@ package git
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -13,7 +14,7 @@ type Digest []byte
 // HeadDigest follows .git/HEAD to get the SHA digest of a repository's current branch.
 func HeadDigest(dir string) (Digest, error) {
 	head := filepath.Join(dir, ".git", "HEAD")
-	br, err := branchRef(head)
+	br, err := BranchRef(head)
 	if err != nil {
 		return nil, err
 	}
@@ -26,21 +27,19 @@ func HeadDigest(dir string) (Digest, error) {
 	return digest, nil
 }
 
-// Equals checks whether one Digest is identical to another.
-func (d Digest) Equals(other Digest) bool {
-	return bytes.Equal(d, other)
-}
-
-func branchRef(headFile string) (string, error) {
-	data, err := os.ReadFile(headFile)
+// HeadDigestString returns a hex encoded string version of a HeadDigest.
+func HeadDigestString(dir string) (string, error) {
+	digest, err := HeadDigest(dir)
 	if err != nil {
 		return "", err
 	}
 
-	data = bytes.TrimPrefix(data, []byte("ref: "))
-	data = trimLineEnds(data)
+	return fmt.Sprintf("%x", digest), nil
+}
 
-	return string(data), nil
+// Equals checks whether one Digest is identical to another.
+func (d Digest) Equals(other Digest) bool {
+	return bytes.Equal(d, other)
 }
 
 func digestFrom(branchRef string) (Digest, error) {

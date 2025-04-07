@@ -4,24 +4,28 @@ import (
 	"testing"
 )
 
-func TestDigestFrom(t *testing.T) {
+func TestBranchRef(t *testing.T) {
 	t.Parallel()
 
 	testCases := map[string]struct {
-		headFile string
-		rhString string
+		headFile  string
+		branchRef string
 	}{
 		"refs/head/main": {
-			headFile: "testdata/mainHeadFile",
-			rhString: "refs/heads/main",
+			headFile:  "testdata/mainHeadFile",
+			branchRef: "refs/heads/main",
 		},
 		"refs/head/master": {
-			headFile: "testdata/masterHeadFile",
-			rhString: "refs/heads/master",
+			headFile:  "testdata/masterHeadFile",
+			branchRef: "refs/heads/master",
 		},
-		"refs/head/somebranch": {
-			headFile: "testdata/branchHeadFile",
-			rhString: "refs/heads/somebranch",
+		"refs/head/someBranch": {
+			headFile:  "testdata/branchHeadFile",
+			branchRef: "refs/heads/someBranch",
+		},
+		"refs/head/detachedHead": {
+			headFile:  "testdata/detachedHeadFile",
+			branchRef: "9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631",
 		},
 	}
 
@@ -29,13 +33,54 @@ func TestDigestFrom(t *testing.T) {
 		t.Run(msg, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := branchRef(tc.headFile)
+			got, err := BranchRef(tc.headFile)
 			if err != nil {
 				t.Fatalf("%s: %s", tc.headFile, err)
 			}
 
-			if got != tc.rhString {
-				t.Errorf("branchRef(%q) = %q; want %q", tc.headFile, got, tc.rhString)
+			if got != tc.branchRef {
+				t.Errorf("BranchRef(%q) = %q; want %q", tc.headFile, got, tc.branchRef)
+			}
+		})
+	}
+}
+
+func TestBranchName(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		headFile   string
+		branchName string
+	}{
+		"refs/head/main": {
+			headFile:   "testdata/mainHeadFile",
+			branchName: "main",
+		},
+		"refs/head/master": {
+			headFile:   "testdata/masterHeadFile",
+			branchName: "master",
+		},
+		"refs/head/someBranch": {
+			headFile:   "testdata/branchHeadFile",
+			branchName: "someBranch",
+		},
+		"refs/head/detachedHead": {
+			headFile:   "testdata/detachedHeadFile",
+			branchName: "9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631",
+		},
+	}
+
+	for msg, tc := range testCases {
+		t.Run(msg, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := BranchName(tc.headFile)
+			if err != nil {
+				t.Fatalf("%s: %s", tc.headFile, err)
+			}
+
+			if got != tc.branchName {
+				t.Errorf("BranchName(%q) = %q; want %q", tc.headFile, got, tc.branchName)
 			}
 		})
 	}

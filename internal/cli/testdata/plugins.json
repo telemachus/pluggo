@@ -1,14 +1,17 @@
 {
     "plugins": [
         {
+            "branch": "foo",
             "name": "foo.git",
             "url": "https://github.com/foo/foo.git"
         },
         {
+            "branch": "master",
             "name": "bar.git",
             "url": "https://github.com/bar/bar.git"
         },
         {
+            "branch": "main",
             "name": "random.git",
             "url": "https://example.com/buzz/fizz.git"
         }

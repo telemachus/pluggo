@@ -24,7 +24,7 @@ warningCode = 0
 [rule.time-naming]
 [rule.unexported-return]
 [rule.unhandled-error]
-  Arguments = ["fmt.*"]
+  Arguments = ["fmt.*", "strings.Builder.WriteString"]
 [rule.unreachable-code]
 [rule.unused-parameter]
 [rule.var-declaration]

@@ -1,38 +1,26 @@
 package cli
 
-import (
-	"fmt"
-	"os"
-)
-
 const (
 	cmdName     = "pluggo"
-	cmdVersion  = "v0.0.1"
+	cmdVersion  = "v0.1.0"
 	confFile    = ".pluggo.json"
+	lockFile    = ".pluggo.lock.json"
 	dataDir     = ".local/share/nvim/site/pack/pluggo"
 	exitSuccess = 0
 	exitFailure = 1
 )
 
-// Pluggo runs a subcommand and returns success or failure to the shell.
+// Pluggo runs the plugin manager and returns success or failure to the shell.
 func Pluggo(args []string) int {
-	cmd, err := cmdFrom(cmdName, cmdVersion, args)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmdName, err)
-		return exitFailure
-	}
+	cmd := cmdFrom(cmdName, cmdVersion, args)
 
-	switch cmd.subCmdName {
-	case "update", "up":
-		subCmdUpdate(cmd)
-	case "install":
-		subCmdInstall(cmd)
-	case "sync":
-		subCmdSync(cmd)
-	default:
-		fmt.Fprintf(os.Stderr, "%s: unrecognized subcommand %q\n", cmd.name, cmd.subCmdName)
-		cmd.exitVal = exitFailure
-	}
+	plugins := cmd.plugins()
+	cmd.reconcile(plugins)
 
+	// TODO: return cmd.exitVal + len(cmd.errs)? This would allow me to
+	// track smaller errors without fully bailing out. That is, cmd.exitVal
+	// causes cmd.noOp() to return true, but len(cmd.errs) does not. This
+	// matters because if I set cmd.exitVal to exitFailure because of minor
+	// errors, then (e.g.) the lockfile will not be saved.
 	return cmd.exitVal
 }

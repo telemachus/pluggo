@@ -6,20 +6,18 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func makePlugins() []Plugin {
-	return []Plugin{
-		{URL: "https://github.com/foo/foo.git", Name: "foo.git"},
-		{URL: "https://github.com/bar/bar.git", Name: "bar.git"},
-		{URL: "https://example.com/buzz/fizz.git", Name: "random.git"},
+func makePlugins() []PluginSpec {
+	return []PluginSpec{
+		{URL: "https://github.com/foo/foo.git", Name: "foo.git", Branch: "foo"},
+		{URL: "https://github.com/bar/bar.git", Name: "bar.git", Branch: "master"},
+		{URL: "https://example.com/buzz/fizz.git", Name: "random.git", Branch: "main"},
 	}
 }
 
 func fakeCmdEnv(confFile string) *cmdEnv {
 	return &cmdEnv{
-		name:       "test",
-		subCmdName: "testing",
-		confFile:   confFile,
-		exitVal:    exitSuccess,
+		name:     "test",
+		confFile: confFile,
 	}
 }
 
@@ -43,7 +41,7 @@ func TestGetPluginsFailure(t *testing.T) {
 	cmd.plugins()
 
 	if cmd.exitVal != exitFailure {
-		t.Error("cmd.exitVal expected exitFailure; actual exitSuccess")
+		t.Error("cmd.exitVal != exitFailure; expected exitFailure")
 	}
 }
 
@@ -56,9 +54,9 @@ func TestRepoChecks(t *testing.T) {
 		t.Fatal("test cannot finish since cmd.plugins() failed")
 	}
 
-	if len(actual) != 0 {
+	if len(actual) != 1 {
 		t.Errorf(
-			"cmd.plugins(%q) expected len(repos) = 0; actual: %d",
+			"cmd.plugins(%q) expected len(repos) = 1; actual: %d",
 			confFile,
 			len(actual),
 		)
