@@ -5,7 +5,6 @@ const (
 	cmdVersion  = "v0.1.0"
 	confFile    = ".pluggo.json"
 	lockFile    = ".pluggo.lock.json"
-	dataDir     = ".local/share/nvim/site/pack/pluggo"
 	exitSuccess = 0
 	exitFailure = 1
 )

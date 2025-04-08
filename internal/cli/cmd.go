@@ -77,9 +77,6 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 		return cmd
 	}
 	cmd.homeDir = homeDir
-	// TODO: consider whether to make this configurable, probably in the
-	// config file and maybe also on the command line.
-	cmd.dataDir = filepath.Join(cmd.homeDir, dataDir)
 
 	// Only set config file path if user does not specify their own.
 	if cmd.confFile == "" {
@@ -112,9 +109,11 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 
 	cfg := struct {
-		Plugins []PluginSpec `json:"plugins"`
+		Plugins  []PluginSpec `json:"plugins"`
+		DataDirs []string     `json:dataDirs`
 	}{
-		Plugins: make([]PluginSpec, 0, 20),
+		Plugins:  make([]PluginSpec, 0, 20),
+		DataDirs: make([]string, 0, 10),
 	}
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
@@ -128,6 +127,11 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 		return nil
 	}
+
+	if len(cfg.DataDirs) >= 1 && cfg.DataDirs[0] == "HOME" {
+		cfg.DataDirs[0] = cmd.homeDir
+	}
+	cmd.dataDir = filepath.Join(cfg.DataDirs...)
 
 	// Every repository must specify a URL, a directory name, and a branch.
 	return slices.DeleteFunc(cfg.Plugins, func(pSpec PluginSpec) bool {
