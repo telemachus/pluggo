@@ -196,17 +196,6 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 
 		return
 	}
-
-	// TODO: this should be a separate function, probably in cmd.go.
-	if err := cmd.updateHelptags(); err != nil {
-		cmd.exitVal = exitFailure
-		fmt.Fprintf(
-			os.Stderr,
-			"%s: failed to update helptags: %s\n",
-			cmd.name,
-			err,
-		)
-	}
 }
 
 type updateResult struct {
@@ -409,17 +398,6 @@ func (cmd *cmdEnv) update(pSpec PluginSpec, pState *PluginState) updateResult {
 	}
 
 	return upRes
-}
-
-// TODO: put this in cmd.go.
-func (cmd *cmdEnv) updateHelptags() error {
-	nvimCmd := exec.Command("nvim", "--headless", "-c", "helptags ALL | quit")
-	output, err := nvimCmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("nvim helptags failed: %s", output)
-	}
-
-	return nil
 }
 
 func (pSpec *PluginSpec) fullPath(dataDir string) string {

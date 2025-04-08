@@ -1,8 +1,5 @@
 # TODO
 
-+ Minor: move the `updateHelpTags` to `cmd.go` and call it from `pluggo.go` as
-  part of the sequence of larger commands. Add a `noOp` check at the top of the
-  function.
 + Medium: require a `basedir` object in the configuration file. The object
   should be an array of strings, which will be joined together to become the
   base directory of the plugins, not including `start/` or `opt/` which will be
