@@ -210,7 +210,7 @@ type updateResult struct {
 func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- result) {
 	pluginDir := pSpec.fullPath(cmd.dataDir)
 
-	// Case 1: a plugin not in filesystem needs installation.
+	// Case 1: a plugin in pSpec but not pState needs installation.
 	if pState == nil {
 		if err := cmd.install(pSpec, pluginDir); err != nil {
 			ch <- result{
@@ -229,7 +229,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 		return
 	}
 
-	// Case 2: A plugin with a configuration change needs reinstallation.
+	// Case 2: a plugin with a configuration change needs reinstallation.
 	var reason string
 	switch {
 	case pState.URL != pSpec.URL:
@@ -342,8 +342,8 @@ func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
 
 	args := pSpec.installArgs(dir)
 	gitCmd := exec.Command("git", args...)
-	if output, err := gitCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git clone failed: %s", output)
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("git clone failed: %s", err)
 	}
 
 	return nil
@@ -392,9 +392,15 @@ func (cmd *cmdEnv) update(pSpec PluginSpec, pState *PluginState) updateResult {
 		return upRes
 	}
 
-	updateCmd := exec.Command("git", "-C", pState.Directory, "pull", "--recurse-submodules")
-	if output, err := updateCmd.CombinedOutput(); err != nil {
-		upRes.err = fmt.Errorf("git pull failed: %s", output)
+	updateCmd := exec.Command(
+		"git",
+		"-C",
+		pState.Directory,
+		"pull",
+		"--recurse-submodules",
+	)
+	if err := updateCmd.Run(); err != nil {
+		upRes.err = fmt.Errorf("git pull failed: %s", err)
 	}
 
 	return upRes
