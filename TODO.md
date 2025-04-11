@@ -1,11 +1,5 @@
 # TODO
 
-+ Medium: require a `basedir` object in the configuration file. The object
-  should be an array of strings, which will be joined together to become the
-  base directory of the plugins, not including `start/` or `opt/` which will be
-  added by the tool depending on the plugins `opt` setting. If the first item in
-  the array is `HOME`, the tool will replace this with the full path to the
-  user's home directory.
 + Medium: improve error handling, especially in `plugin.go`. The app should
   return a non-zero status if any problem occurs, but it should only abort for
   grave errors.
