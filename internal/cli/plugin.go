@@ -71,8 +71,8 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 
 			url, err := git.URL(pluginDir)
 			if err != nil {
-				// TODO: don't set exitVal for this. Use an error field
-				// that doesn't trigger noOp.
+				// TODO: don't set exitVal for this. Use a
+				// warnings field that doesn't trigger noOp.
 				cmd.exitVal = exitFailure
 				fmt.Fprintf(
 					os.Stderr,
@@ -85,13 +85,14 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 				continue
 			}
 
-			branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
+			repo := git.NewRepo(pluginDir)
+			branch, err := repo.BranchName()
 			if err != nil {
 				// TODO: bail out if we cannot get a branch?
 				branch = ""
 			}
 
-			hash, err := git.HeadDigestString(pluginDir)
+			hash, err := repo.HeadDigestString()
 			if err != nil {
 				// TODO: don't set exitVal for this. Use an error field
 				// that doesn't trigger noOp.
@@ -277,7 +278,8 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 		return
 	}
 
-	hashAfter, err := git.HeadDigestString(pState.Directory)
+	repo := git.NewRepo(pState.Directory)
+	hashAfter, err := repo.HeadDigestString()
 	if err != nil {
 		ch <- result{
 			isErr: true,

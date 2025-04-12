@@ -3,38 +3,60 @@ package git
 
 import (
 	"bytes"
-	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
+	"strings"
 )
 
 // Digest represents a SHA-1 digest as a []byte.
 type Digest []byte
 
-// HeadDigest follows .git/HEAD to get the SHA digest of a repository's current branch.
-func HeadDigest(dir string) (Digest, error) {
-	head := filepath.Join(dir, ".git", "HEAD")
-	br, err := BranchRef(head)
+// HeadDigest follows .git/HEAD to get the SHA digest of a repository's current
+// branch.
+func (repo *Repository) HeadDigest() (Digest, error) {
+	// TODO: add .git to the root path of the filesystem and use
+	// a Branch function here.
+	headPath := ".git/HEAD"
+	headData, err := fs.ReadFile(repo.filesystem, headPath)
 	if err != nil {
 		return nil, err
 	}
 
-	digest, err := digestFrom(filepath.Join(dir, ".git", br))
-	if err != nil {
-		return nil, err
+	headData = trimLineEnds(headData)
+	headStr := string(headData)
+
+	// Check if it's a reference or a direct hash (detached HEAD).
+	// TODO: we should never get this far. If this is a detached HEAD,
+	// we should have received an error above.
+	if strings.HasPrefix(headStr, "ref: ") {
+		// It's a reference, follow it
+		br, err := repo.BranchRef()
+		if err != nil {
+			return nil, err
+		}
+
+		relPath := filepath.ToSlash(".git/" + br)
+		digest, err := repo.digestFrom(relPath)
+		if err != nil {
+			return nil, err
+		}
+
+		return digest, nil
 	}
 
-	return digest, nil
+	// It's a detached HEAD, the content is already the hash.
+	// TODO: fix this. We don't want to return the digest of a detached HEAD.
+	return Digest(headData), nil
 }
 
-// HeadDigestString returns a hex encoded string version of a HeadDigest.
-func HeadDigestString(dir string) (string, error) {
-	digest, err := HeadDigest(dir)
+// HeadDigestString returns the SHA digest as a string.
+func (repo *Repository) HeadDigestString() (string, error) {
+	digest, err := repo.HeadDigest()
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf("%x", digest), nil
+	return string(digest), nil
 }
 
 // Equals checks whether one Digest is identical to another.
@@ -42,11 +64,13 @@ func (d Digest) Equals(other Digest) bool {
 	return bytes.Equal(d, other)
 }
 
-func digestFrom(branchRef string) (Digest, error) {
-	data, err := os.ReadFile(branchRef)
+func (repo *Repository) digestFrom(branchRef string) (Digest, error) {
+	data, err := fs.ReadFile(repo.filesystem, branchRef)
 	if err != nil {
 		return Digest(nil), err
 	}
+
+	data = trimLineEnds(data)
 
 	return Digest(data), nil
 }
