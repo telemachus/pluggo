@@ -70,12 +70,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		cmd.errCount++
-		fmt.Fprintf(
-			os.Stderr,
-			"%s: cannot get user's home directory: %s\n",
-			cmd.name,
-			err,
-		)
+		fmt.Fprintf(os.Stderr, "%s: cannot get user's home directory: %s\n", cmd.name, err)
 
 		return cmd
 	}
@@ -101,12 +96,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
 		cmd.errCount++
-		fmt.Fprintf(
-			os.Stderr,
-			"%s: failed to read config file: %s\n",
-			cmd.name,
-			err,
-		)
+		fmt.Fprintf(os.Stderr, "%s: failed to read config file: %s\n", cmd.name, err)
 
 		return nil
 	}
@@ -121,12 +111,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
 		cmd.errCount++
-		fmt.Fprintf(
-			os.Stderr,
-			"%s: failed to parse config file: %s\n",
-			cmd.name,
-			err,
-		)
+		fmt.Fprintf(os.Stderr, "%s: failed to parse config file: %s\n", cmd.name, err)
 
 		return nil
 	}
@@ -156,11 +141,7 @@ func validate(extra []string) error {
 			s = 's'
 		}
 
-		return fmt.Errorf(
-			"unrecognized argument%c: %s",
-			s,
-			quotedSlice(extra),
-		)
+		return fmt.Errorf("unrecognized argument%c: %s", s, quotedSlice(extra))
 	}
 
 	return nil

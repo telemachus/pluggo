@@ -48,13 +48,7 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 		entries, err := os.ReadDir(baseDir)
 		if err != nil {
 			cmd.warnCount++
-			fmt.Fprintf(
-				os.Stderr,
-				"%s: failed to read plugin directory %s: %s\n",
-				cmd.name,
-				baseDir,
-				err,
-			)
+			fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %s: %s\n", cmd.name, baseDir, err)
 
 			continue
 		}
@@ -70,13 +64,7 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 			url, err := git.URL(pluginDir)
 			if err != nil {
 				cmd.warnCount++
-				fmt.Fprintf(
-					os.Stderr,
-					"%s: failed to get URL for plugin %s: %s\n",
-					cmd.name,
-					entry.Name(),
-					err,
-				)
+				fmt.Fprintf(os.Stderr, "%s: failed to get URL for plugin %s: %s\n", cmd.name, entry.Name(), err)
 
 				continue
 			}
@@ -84,25 +72,13 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 			branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
 			if err != nil {
 				cmd.warnCount++
-				fmt.Fprintf(
-					os.Stderr,
-					"%s: failed to get hash for plugin %s: %s\n",
-					cmd.name,
-					entry.Name(),
-					err,
-				)
+				fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n", cmd.name, entry.Name(), err)
 			}
 
 			hash, err := git.HeadDigestString(pluginDir)
 			if err != nil {
 				cmd.warnCount++
-				fmt.Fprintf(
-					os.Stderr,
-					"%s: failed to get hash for plugin %s: %s\n",
-					cmd.name,
-					entry.Name(),
-					err,
-				)
+				fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n", cmd.name, entry.Name(), err)
 
 				continue
 			}
@@ -135,12 +111,7 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 	// Abort if plugin directory does not exist and cannot be created.
 	if err := os.MkdirAll(cmd.dataDir, os.ModePerm); err != nil {
 		cmd.errCount++
-		fmt.Fprintf(
-			os.Stderr,
-			"%s: failed to create plugin directory: %s\n",
-			cmd.name,
-			err,
-		)
+		fmt.Fprintf(os.Stderr, "%s: failed to create plugin directory: %s\n", cmd.name, err)
 
 		return
 	}
@@ -150,7 +121,6 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 		go cmd.process(spec, statesByName[spec.Name], ch)
 	}
 
-	// Collect results
 	for range pSpecs {
 		res := <-ch
 
@@ -166,13 +136,7 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 		if _, exists := specsByName[stateName]; !exists {
 			if err := os.RemoveAll(state.Directory); err != nil {
 				cmd.warnCount++
-				fmt.Fprintf(
-					os.Stderr,
-					"%s: failed to remove %s: %s\n",
-					cmd.name,
-					stateName,
-					err,
-				)
+				fmt.Fprintf(os.Stderr, "%s: failed to remove %s: %s\n", cmd.name, stateName, err)
 
 				continue
 			}
@@ -222,11 +186,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 	case pState.URL != pSpec.URL:
 		reason = "repo URL changed"
 	case pState.Branch != pSpec.Branch:
-		reason = fmt.Sprintf(
-			"switching from branch %s to %s",
-			pState.Branch,
-			pSpec.Branch,
-		)
+		reason = fmt.Sprintf("switching from branch %s to %s", pState.Branch, pSpec.Branch)
 	}
 
 	if reason != "" {
@@ -256,11 +216,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 		cmd.incrementWarn()
 		ch <- result{
 			isErr: true,
-			msg: fmt.Sprintf(
-				"failed to update %s: %s",
-				pSpec.Name,
-				upRes.err,
-			),
+			msg:   fmt.Sprintf("failed to update %s: %s", pSpec.Name, upRes.err),
 		}
 
 		return
@@ -357,19 +313,13 @@ func (cmd *cmdEnv) update(pSpec PluginSpec, pState *PluginState) updateResult {
 		upRes.toOpt = pSpec.Opt
 
 		if err := os.MkdirAll(filepath.Dir(pluginDir), os.ModePerm); err != nil {
-			upRes.err = fmt.Errorf(
-				"failed to create parent directory for move: %w",
-				err,
-			)
+			upRes.err = fmt.Errorf("failed to create parent directory for move: %w", err)
 
 			return upRes
 		}
 
 		if err := os.Rename(pState.Directory, pluginDir); err != nil {
-			upRes.err = fmt.Errorf(
-				"failed to move plugin directory: %w",
-				err,
-			)
+			upRes.err = fmt.Errorf("failed to move plugin directory: %w", err)
 
 			return upRes
 		}
@@ -382,13 +332,7 @@ func (cmd *cmdEnv) update(pSpec PluginSpec, pState *PluginState) updateResult {
 		return upRes
 	}
 
-	updateCmd := exec.Command(
-		"git",
-		"-C",
-		pState.Directory,
-		"pull",
-		"--recurse-submodules",
-	)
+	updateCmd := exec.Command("git", "-C", pState.Directory, "pull", "--recurse-submodules")
 	if err := updateCmd.Run(); err != nil {
 		upRes.err = fmt.Errorf("git pull failed: %s", err)
 	}
