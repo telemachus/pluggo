@@ -19,14 +19,15 @@ type cmdEnv struct {
 	confFile      string
 	homeDir       string
 	dataDir       string
-	exitVal       int
+	errCount      int
+	warnCount     int
 	helpWanted    bool
 	quietWanted   bool
 	versionWanted bool
 }
 
 func cmdFrom(name, version string, args []string) *cmdEnv {
-	cmd := &cmdEnv{name: name, version: version, exitVal: exitSuccess}
+	cmd := &cmdEnv{name: name, version: version}
 
 	og := opts.NewGroup(cmd.name)
 	og.String(&cmd.confFile, "config", "")
@@ -36,7 +37,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	og.Bool(&cmd.versionWanted, "version")
 
 	if err := og.Parse(args); err != nil {
-		cmd.exitVal = exitFailure
+		cmd.errCount++
 		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
 
 		return cmd
@@ -57,7 +58,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	// Do not continue if we cannot parse and validate arguments.
 	extraArgs := og.Args()
 	if err := validate(extraArgs); err != nil {
-		cmd.exitVal = exitFailure
+		cmd.errCount++
 		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
 
 		return cmd
@@ -66,7 +67,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	// Do not continue if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		cmd.exitVal = exitFailure
+		cmd.errCount++
 		fmt.Fprintf(
 			os.Stderr,
 			"%s: cannot get user's home directory: %s\n",
@@ -87,7 +88,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 }
 
 func (cmd *cmdEnv) noOp() bool {
-	return cmd.exitVal != exitSuccess || cmd.helpWanted || cmd.versionWanted
+	return cmd.errCount > 0 || cmd.helpWanted || cmd.versionWanted
 }
 
 func (cmd *cmdEnv) plugins() []PluginSpec {
@@ -97,7 +98,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
-		cmd.exitVal = exitFailure
+		cmd.errCount++
 		fmt.Fprintf(
 			os.Stderr,
 			"%s: failed to read config file: %s\n",
@@ -117,7 +118,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
-		cmd.exitVal = exitFailure
+		cmd.errCount++
 		fmt.Fprintf(
 			os.Stderr,
 			"%s: failed to parse config file: %s\n",

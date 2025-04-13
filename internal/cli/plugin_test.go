@@ -27,7 +27,7 @@ func TestGetPluginsSuccess(t *testing.T) {
 	cmd := fakeCmdEnv(confFile)
 
 	actual := cmd.plugins()
-	if cmd.exitVal != exitSuccess {
+	if cmd.errCount > 0 {
 		t.Fatal("test cannot finish since cmd.plugins() failed")
 	}
 
@@ -40,8 +40,8 @@ func TestGetPluginsFailure(t *testing.T) {
 	cmd := fakeCmdEnv("testdata/nope.json")
 	cmd.plugins()
 
-	if cmd.exitVal != exitFailure {
-		t.Error("cmd.exitVal != exitFailure; expected exitFailure")
+	if cmd.errCount == 0 {
+		t.Error("cmd.exitVal == 0; expected error")
 	}
 }
 
@@ -50,7 +50,7 @@ func TestRepoChecks(t *testing.T) {
 	cmd := fakeCmdEnv(confFile)
 
 	actual := cmd.plugins()
-	if cmd.exitVal != exitSuccess {
+	if cmd.errCount > 0 {
 		t.Fatal("test cannot finish since cmd.plugins() failed")
 	}
 

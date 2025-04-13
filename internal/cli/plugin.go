@@ -36,7 +36,7 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 		return nil
 	}
 
-	statesByName := make(map[string]*PluginState, 15)
+	statesByName := make(map[string]*PluginState, 20)
 
 	for _, dir := range []string{"start", "opt"} {
 		baseDir := filepath.Join(cmd.dataDir, dir)
@@ -47,9 +47,7 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 
 		entries, err := os.ReadDir(baseDir)
 		if err != nil {
-			// TODO: don't set exitVal for this. Use an error field
-			// that doesn't trigger noOp.
-			cmd.exitVal = exitFailure
+			cmd.warnCount++
 			fmt.Fprintf(
 				os.Stderr,
 				"%s: failed to read plugin directory %s: %s\n",
@@ -71,9 +69,7 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 
 			url, err := git.URL(pluginDir)
 			if err != nil {
-				// TODO: don't set exitVal for this. Use an error field
-				// that doesn't trigger noOp.
-				cmd.exitVal = exitFailure
+				cmd.warnCount++
 				fmt.Fprintf(
 					os.Stderr,
 					"%s: failed to get URL for plugin %s: %s\n",
@@ -87,15 +83,19 @@ func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
 
 			branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
 			if err != nil {
-				// TODO: bail out if we cannot get a branch?
-				branch = ""
+				cmd.warnCount++
+				fmt.Fprintf(
+					os.Stderr,
+					"%s: failed to get hash for plugin %s: %s\n",
+					cmd.name,
+					entry.Name(),
+					err,
+				)
 			}
 
 			hash, err := git.HeadDigestString(pluginDir)
 			if err != nil {
-				// TODO: don't set exitVal for this. Use an error field
-				// that doesn't trigger noOp.
-				cmd.exitVal = exitFailure
+				cmd.warnCount++
 				fmt.Fprintf(
 					os.Stderr,
 					"%s: failed to get hash for plugin %s: %s\n",
@@ -126,9 +126,6 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 	}
 
 	statesByName := cmd.discoverPlugins()
-	if statesByName == nil && cmd.exitVal == exitFailure {
-		return
-	}
 
 	specsByName := make(map[string]PluginSpec, len(pSpecs))
 	for _, p := range pSpecs {
@@ -137,7 +134,7 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 
 	// Abort if plugin directory does not exist and cannot be created.
 	if err := os.MkdirAll(cmd.dataDir, os.ModePerm); err != nil {
-		cmd.exitVal = exitFailure
+		cmd.errCount++
 		fmt.Fprintf(
 			os.Stderr,
 			"%s: failed to create plugin directory: %s\n",
@@ -154,12 +151,8 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 	}
 
 	// Collect results
-	var errs []string
 	for range pSpecs {
 		res := <-ch
-		if res.isErr {
-			errs = append(errs, res.msg)
-		}
 
 		if !cmd.quietWanted {
 			res.publish()
@@ -172,9 +165,13 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 	for stateName, state := range statesByName {
 		if _, exists := specsByName[stateName]; !exists {
 			if err := os.RemoveAll(state.Directory); err != nil {
-				errs = append(
-					errs,
-					fmt.Sprintf("failed to remove %s: %s", stateName, err),
+				cmd.warnCount++
+				fmt.Fprintf(
+					os.Stderr,
+					"%s: failed to remove %s: %s\n",
+					cmd.name,
+					stateName,
+					err,
 				)
 
 				continue
@@ -184,17 +181,6 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 				fmt.Printf("%s: removed (not in configuration)\n", stateName)
 			}
 		}
-	}
-
-	if len(errs) > 0 {
-		fmt.Fprintf(
-			os.Stderr,
-			"%s: failed to reconcile plugins:\n%s",
-			cmd.name,
-			strings.Join(errs, "\n"),
-		)
-
-		return
 	}
 }
 
@@ -210,9 +196,10 @@ type updateResult struct {
 func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- result) {
 	pluginDir := pSpec.fullPath(cmd.dataDir)
 
-	// Case 1: a plugin in pSpec but not pState needs installation.
+	// Case 1: if a plugin is present in pSpec but not pState, install it.
 	if pState == nil {
 		if err := cmd.install(pSpec, pluginDir); err != nil {
+			cmd.warnCount++
 			ch <- result{
 				isErr: true,
 				msg:   fmt.Sprintf("failed to install %s: %s", pSpec.Name, err),
@@ -229,7 +216,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 		return
 	}
 
-	// Case 2: a plugin with a configuration change needs reinstallation.
+	// Case 2: if configuration has changed, reinstall the plugin.
 	var reason string
 	switch {
 	case pState.URL != pSpec.URL:
@@ -244,6 +231,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 
 	if reason != "" {
 		if err := cmd.reinstall(pSpec, pState.Directory); err != nil {
+			cmd.warnCount++
 			ch <- result{
 				isErr: true,
 				msg:   fmt.Sprintf("failed to reinstall %s: %s", pSpec.Name, err),
@@ -260,11 +248,12 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 		return
 	}
 
-	// Case 3: if we reach this point, the plugin should be checked for an update.
+	// Case 3: if we reach this point, update the plugin.
 	hashBefore := pState.Hash
 
 	upRes := cmd.update(pSpec, pState)
 	if upRes.err != nil {
+		cmd.warnCount++
 		ch <- result{
 			isErr: true,
 			msg: fmt.Sprintf(
@@ -279,6 +268,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 
 	hashAfter, err := git.HeadDigestString(pState.Directory)
 	if err != nil {
+		cmd.warnCount++
 		ch <- result{
 			isErr: true,
 			msg:   fmt.Sprintf("failed to get updated hash for %s: %s", pSpec.Name, err),
@@ -387,7 +377,7 @@ func (cmd *cmdEnv) update(pSpec PluginSpec, pState *PluginState) updateResult {
 		pState.Directory = pluginDir
 	}
 
-	// If the plugin is pinned, then we should not update.
+	// If the plugin is pinned, skip update.
 	if pSpec.Pin {
 		return upRes
 	}
