@@ -185,12 +185,12 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 }
 
 type updateResult struct {
+	err        error
+	hashBefore string
+	hashAfter  string
 	moved      bool
 	pin        bool
 	toOpt      bool
-	hashBefore string
-	hashAfter  string
-	err        error
 }
 
 func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- result) {
