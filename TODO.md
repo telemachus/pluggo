@@ -1,5 +1,10 @@
 # TODO
 
+## `internal/cli`
+
++ Medium: reduce the size and complexity of the functions in plugin.go,
+  especially `process`.
+
 ## `internal/git`
 
 + Medium: do I need both `git.HeadDigestString` and `git.HeadDigest`? Maybe
