@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/telemachus/pluggo/internal/opts"
 )
@@ -24,6 +25,7 @@ type cmdEnv struct {
 	helpWanted    bool
 	quietWanted   bool
 	versionWanted bool
+	mu            sync.Mutex
 }
 
 func cmdFrom(name, version string, args []string) *cmdEnv {
@@ -138,6 +140,12 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	return slices.DeleteFunc(cfg.Plugins, func(pSpec PluginSpec) bool {
 		return pSpec.URL == "" || pSpec.Name == "" || pSpec.Branch == ""
 	})
+}
+
+func (cmd *cmdEnv) incrementWarn() {
+	cmd.mu.Lock()
+	cmd.warnCount++
+	cmd.mu.Unlock()
 }
 
 func validate(extra []string) error {

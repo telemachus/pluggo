@@ -199,7 +199,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 	// Case 1: if a plugin is present in pSpec but not pState, install it.
 	if pState == nil {
 		if err := cmd.install(pSpec, pluginDir); err != nil {
-			cmd.warnCount++
+			cmd.incrementWarn()
 			ch <- result{
 				isErr: true,
 				msg:   fmt.Sprintf("failed to install %s: %s", pSpec.Name, err),
@@ -231,7 +231,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 
 	if reason != "" {
 		if err := cmd.reinstall(pSpec, pState.Directory); err != nil {
-			cmd.warnCount++
+			cmd.incrementWarn()
 			ch <- result{
 				isErr: true,
 				msg:   fmt.Sprintf("failed to reinstall %s: %s", pSpec.Name, err),
@@ -253,7 +253,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 
 	upRes := cmd.update(pSpec, pState)
 	if upRes.err != nil {
-		cmd.warnCount++
+		cmd.incrementWarn()
 		ch <- result{
 			isErr: true,
 			msg: fmt.Sprintf(
@@ -268,7 +268,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 
 	hashAfter, err := git.HeadDigestString(pState.Directory)
 	if err != nil {
-		cmd.warnCount++
+		cmd.incrementWarn()
 		ch <- result{
 			isErr: true,
 			msg:   fmt.Sprintf("failed to get updated hash for %s: %s", pSpec.Name, err),
