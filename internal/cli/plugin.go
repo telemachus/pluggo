@@ -11,8 +11,7 @@ import (
 	"github.com/telemachus/pluggo/internal/git"
 )
 
-// PluginSpec represents the state of a plugin as declared by a user's
-// configuration file.
+// PluginSpec represents a plugin in a user's configuration file.
 type PluginSpec struct {
 	URL    string
 	Name   string
@@ -21,8 +20,7 @@ type PluginSpec struct {
 	Pin    bool
 }
 
-// PluginState represents the state of a plugin as determined from the
-// filesystem.
+// PluginState represents a plugin on disk.
 type PluginState struct {
 	Name      string
 	Directory string
@@ -31,94 +29,123 @@ type PluginState struct {
 	Hash      string
 }
 
-func (cmd *cmdEnv) discoverPlugins() map[string]*PluginState {
-	if cmd.noOp() {
-		return nil
+func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
+	if cmd.noOp() || !cmd.pluginDirExists() {
+		return
 	}
 
+	statesByName := cmd.scanDirectories()
+	specsByName := makeSpecMap(pSpecs)
+
+	cmd.processAll(statesByName, pSpecs)
+
+	unwanted := findUnwanted(statesByName, specsByName)
+	cmd.removeAll(unwanted)
+}
+
+func (cmd *cmdEnv) pluginDirExists() bool {
+	if err := os.MkdirAll(cmd.dataDir, os.ModePerm); err != nil {
+		cmd.errCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to create plugin directory: %s\n", cmd.name, err)
+
+		return false
+	}
+
+	return true
+}
+
+func (cmd *cmdEnv) scanDirectories() map[string]*PluginState {
 	statesByName := make(map[string]*PluginState, 20)
 
 	for _, dir := range []string{"start", "opt"} {
-		baseDir := filepath.Join(cmd.dataDir, dir)
-
-		if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-			continue
-		}
-
-		entries, err := os.ReadDir(baseDir)
-		if err != nil {
-			cmd.warnCount++
-			fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %s: %s\n", cmd.name, baseDir, err)
-
-			continue
-		}
-
-		// Remove all entries that are not directories or not git repos.
-		entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
-			return !entry.IsDir() || !isGitRepo(entry, baseDir)
-		})
-
-		for _, entry := range entries {
-			pluginDir := filepath.Join(baseDir, entry.Name())
-
-			url, err := git.URL(pluginDir)
-			if err != nil {
-				cmd.warnCount++
-				fmt.Fprintf(os.Stderr, "%s: failed to get URL for plugin %s: %s\n", cmd.name, entry.Name(), err)
-
-				continue
-			}
-
-			branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
-			if err != nil {
-				cmd.warnCount++
-				fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n", cmd.name, entry.Name(), err)
-			}
-
-			hash, err := git.HeadDigestString(pluginDir)
-			if err != nil {
-				cmd.warnCount++
-				fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n", cmd.name, entry.Name(), err)
-
-				continue
-			}
-
-			statesByName[entry.Name()] = &PluginState{
-				Name:      entry.Name(),
-				Directory: pluginDir,
-				URL:       url,
-				Branch:    branch,
-				Hash:      hash,
-			}
+		states := cmd.scanSingleDirectory(dir)
+		for name, state := range states {
+			statesByName[name] = state
 		}
 	}
 
 	return statesByName
 }
 
-func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
-	if cmd.noOp() {
-		return
+func (cmd *cmdEnv) scanSingleDirectory(dir string) map[string]*PluginState {
+	states := make(map[string]*PluginState)
+	baseDir := filepath.Join(cmd.dataDir, dir)
+
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		return states
 	}
 
-	statesByName := cmd.discoverPlugins()
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %s: %s\n", cmd.name, baseDir, err)
 
+		return states
+	}
+
+	entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
+		return !entry.IsDir() || !isGitRepo(baseDir, entry.Name())
+	})
+
+	for _, entry := range entries {
+		if state := cmd.createState(entry, baseDir); state != nil {
+			states[entry.Name()] = state
+		}
+	}
+
+	return states
+}
+
+func (cmd *cmdEnv) createState(entry os.DirEntry, baseDir string) *PluginState {
+	pluginDir := filepath.Join(baseDir, entry.Name())
+
+	url, err := git.URL(pluginDir)
+	if err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to get URL for plugin %s: %s\n", cmd.name, entry.Name(), err)
+
+		return nil
+	}
+
+	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
+	if err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to get branch for plugin %s: %s\n", cmd.name, entry.Name(), err)
+
+		return nil
+	}
+
+	hash, err := git.HeadDigestString(pluginDir)
+	if err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n",
+			cmd.name, entry.Name(), err)
+
+		return nil
+	}
+
+	return &PluginState{
+		Name:      entry.Name(),
+		Directory: pluginDir,
+		URL:       url,
+		Branch:    branch,
+		Hash:      hash,
+	}
+}
+
+func makeSpecMap(pSpecs []PluginSpec) map[string]PluginSpec {
 	specsByName := make(map[string]PluginSpec, len(pSpecs))
 	for _, p := range pSpecs {
 		specsByName[p.Name] = p
 	}
 
-	// Abort if plugin directory does not exist and cannot be created.
-	if err := os.MkdirAll(cmd.dataDir, os.ModePerm); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to create plugin directory: %s\n", cmd.name, err)
+	return specsByName
+}
 
-		return
-	}
-
+func (cmd *cmdEnv) processAll(statesByName map[string]*PluginState, pSpecs []PluginSpec) {
 	ch := make(chan result)
 	for _, spec := range pSpecs {
-		go cmd.process(spec, statesByName[spec.Name], ch)
+		go cmd.reconcile(statesByName[spec.Name], spec, ch)
 	}
 
 	for range pSpecs {
@@ -130,88 +157,109 @@ func (cmd *cmdEnv) reconcile(pSpecs []PluginSpec) {
 			res.publishError()
 		}
 	}
+}
 
-	// Remove plugins that are in the filesystem but not the config.
-	for stateName, state := range statesByName {
-		if _, exists := specsByName[stateName]; !exists {
-			if err := os.RemoveAll(state.Directory); err != nil {
-				cmd.warnCount++
-				fmt.Fprintf(os.Stderr, "%s: failed to remove %s: %s\n", cmd.name, stateName, err)
+func findUnwanted(statesByName map[string]*PluginState, specsByName map[string]PluginSpec) map[string]string {
+	unwanted := make(map[string]string, len(statesByName))
 
-				continue
-			}
-
-			if !cmd.quietWanted {
-				fmt.Printf("%s: removed (not in configuration)\n", stateName)
-			}
+	for pluginName, state := range statesByName {
+		if _, exists := specsByName[pluginName]; !exists {
+			unwanted[pluginName] = state.Directory
 		}
+	}
+
+	return unwanted
+}
+
+func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
+	for pluginName, pluginPath := range unwanted {
+		cmd.remove(pluginName, pluginPath)
 	}
 }
 
-type updateResult struct {
-	err        error
-	hashBefore string
-	hashAfter  string
-	moved      bool
-	pin        bool
-	toOpt      bool
-}
-
-func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- result) {
-	pluginDir := pSpec.fullPath(cmd.dataDir)
-
-	// Case 1: if a plugin is present in pSpec but not pState, install it.
-	if pState == nil {
-		if err := cmd.install(pSpec, pluginDir); err != nil {
-			cmd.incrementWarn()
-			ch <- result{
-				isErr: true,
-				msg:   fmt.Sprintf("failed to install %s: %s", pSpec.Name, err),
-			}
-
-			return
-		}
-
-		ch <- result{
-			isErr: false,
-			msg:   fmt.Sprintf("%s: installed", pSpec.Name),
-		}
+func (cmd *cmdEnv) remove(pluginName, pluginPath string) {
+	if err := os.RemoveAll(pluginPath); err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to remove %s: %s\n",
+			cmd.name, pluginName, err)
 
 		return
 	}
 
-	// Case 2: if configuration has changed, reinstall the plugin.
-	var reason string
+	if !cmd.quietWanted {
+		fmt.Printf("%s: removed (not in configuration)\n", pluginName)
+	}
+}
+
+func (cmd *cmdEnv) reconcile(pState *PluginState, pSpec PluginSpec, ch chan<- result) {
+	if pState == nil {
+		cmd.manageInstall(pSpec, ch)
+
+		return
+	}
+
+	if changed, reason := cmd.hasConfigChanged(pState, pSpec); changed {
+		cmd.manageReinstall(pState, pSpec, reason, ch)
+
+		return
+	}
+
+	cmd.manageUpdate(pState, pSpec, ch)
+}
+
+func (cmd *cmdEnv) hasConfigChanged(pState *PluginState, pSpec PluginSpec) (bool, string) {
 	switch {
 	case pState.URL != pSpec.URL:
-		reason = "repo URL changed"
+		return true, "repo URL changed"
 	case pState.Branch != pSpec.Branch:
-		reason = fmt.Sprintf("switching from branch %s to %s", pState.Branch, pSpec.Branch)
+		return true, fmt.Sprintf(
+			"switching from branch %s to %s",
+			pState.Branch,
+			pSpec.Branch,
+		)
+	default:
+		return false, ""
 	}
+}
 
-	if reason != "" {
-		if err := cmd.reinstall(pSpec, pState.Directory); err != nil {
-			cmd.incrementWarn()
-			ch <- result{
-				isErr: true,
-				msg:   fmt.Sprintf("failed to reinstall %s: %s", pSpec.Name, err),
-			}
+func (cmd *cmdEnv) manageInstall(pSpec PluginSpec, ch chan<- result) {
+	pluginDir := pSpec.fullPath(cmd.dataDir)
 
-			return
-		}
-
+	if err := cmd.install(pSpec, pluginDir); err != nil {
+		cmd.incrementWarn()
 		ch <- result{
-			isErr: false,
-			msg:   fmt.Sprintf("%s: reinstalled (%s)", pSpec.Name, reason),
+			isErr: true,
+			msg:   fmt.Sprintf("failed to install %s: %s", pSpec.Name, err),
 		}
 
 		return
 	}
 
-	// Case 3: if we reach this point, update the plugin.
-	hashBefore := pState.Hash
+	ch <- result{
+		isErr: false,
+		msg:   fmt.Sprintf("%s: installed", pSpec.Name),
+	}
+}
 
-	upRes := cmd.update(pSpec, pState)
+func (cmd *cmdEnv) manageReinstall(pState *PluginState, pSpec PluginSpec, reason string, ch chan<- result) {
+	if err := cmd.reinstall(pState.Directory, pSpec); err != nil {
+		cmd.incrementWarn()
+		ch <- result{
+			isErr: true,
+			msg:   fmt.Sprintf("failed to reinstall %s: %s", pSpec.Name, err),
+		}
+
+		return
+	}
+
+	ch <- result{
+		isErr: false,
+		msg:   fmt.Sprintf("%s: reinstalled (%s)", pSpec.Name, reason),
+	}
+}
+
+func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<- result) {
+	upRes := cmd.update(pState, pSpec)
 	if upRes.err != nil {
 		cmd.incrementWarn()
 		ch <- result{
@@ -222,6 +270,7 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 		return
 	}
 
+	hashBefore := pState.Hash
 	hashAfter, err := git.HeadDigestString(pState.Directory)
 	if err != nil {
 		cmd.incrementWarn()
@@ -235,12 +284,75 @@ func (cmd *cmdEnv) process(pSpec PluginSpec, pState *PluginState, ch chan<- resu
 
 	upRes.hashBefore = hashBefore[:7]
 	upRes.hashAfter = hashAfter[:7]
-	msg := formatUpdateMsg(pSpec.Name, upRes)
 
 	ch <- result{
 		isErr: false,
-		msg:   msg,
+		msg:   formatUpdateMsg(pSpec.Name, upRes),
 	}
+}
+
+type updateResult struct {
+	err        error
+	hashBefore string
+	hashAfter  string
+	moved      bool
+	pin        bool
+	toOpt      bool
+}
+
+func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
+	if err := os.MkdirAll(filepath.Dir(dir), os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	args := pSpec.installArgs(dir)
+	gitCmd := exec.Command("git", args...)
+	if err := gitCmd.Run(); err != nil {
+		return fmt.Errorf("git clone failed: %s", err)
+	}
+
+	return nil
+}
+
+func (cmd *cmdEnv) reinstall(dir string, pSpec PluginSpec) error {
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf("failed to remove existing directory: %w", err)
+	}
+
+	return cmd.install(pSpec, pSpec.fullPath(cmd.dataDir))
+}
+
+func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) updateResult {
+	upRes := updateResult{pin: pSpec.Pin}
+	pluginDir := pSpec.fullPath(cmd.dataDir)
+
+	if pluginDir != pState.Directory {
+		upRes.moved = true
+		upRes.toOpt = pSpec.Opt
+
+		if err := os.MkdirAll(filepath.Dir(pluginDir), os.ModePerm); err != nil {
+			upRes.err = fmt.Errorf("failed to create parent directory for move: %w", err)
+			return upRes
+		}
+
+		if err := os.Rename(pState.Directory, pluginDir); err != nil {
+			upRes.err = fmt.Errorf("failed to move plugin directory: %w", err)
+			return upRes
+		}
+
+		pState.Directory = pluginDir
+	}
+
+	if pSpec.Pin {
+		return upRes
+	}
+
+	updateCmd := exec.Command("git", "-C", pState.Directory, "pull", "--recurse-submodules")
+	if err := updateCmd.Run(); err != nil {
+		upRes.err = fmt.Errorf("git pull failed: %s", err)
+	}
+
+	return upRes
 }
 
 func formatUpdateMsg(pluginName string, upRes updateResult) string {
@@ -281,65 +393,6 @@ func formatUpdateMsg(pluginName string, upRes updateResult) string {
 	return msg.String()
 }
 
-func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
-	if err := os.MkdirAll(filepath.Dir(dir), os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	args := pSpec.installArgs(dir)
-	gitCmd := exec.Command("git", args...)
-	if err := gitCmd.Run(); err != nil {
-		return fmt.Errorf("git clone failed: %s", err)
-	}
-
-	return nil
-}
-
-func (cmd *cmdEnv) reinstall(pSpec PluginSpec, dir string) error {
-	if err := os.RemoveAll(dir); err != nil {
-		return fmt.Errorf("failed to remove existing directory: %w", err)
-	}
-
-	return cmd.install(pSpec, pSpec.fullPath(cmd.dataDir))
-}
-
-func (cmd *cmdEnv) update(pSpec PluginSpec, pState *PluginState) updateResult {
-	upRes := updateResult{pin: pSpec.Pin}
-	pluginDir := pSpec.fullPath(cmd.dataDir)
-
-	// Move the plugin if necessary.
-	if pluginDir != pState.Directory {
-		upRes.moved = true
-		upRes.toOpt = pSpec.Opt
-
-		if err := os.MkdirAll(filepath.Dir(pluginDir), os.ModePerm); err != nil {
-			upRes.err = fmt.Errorf("failed to create parent directory for move: %w", err)
-
-			return upRes
-		}
-
-		if err := os.Rename(pState.Directory, pluginDir); err != nil {
-			upRes.err = fmt.Errorf("failed to move plugin directory: %w", err)
-
-			return upRes
-		}
-
-		pState.Directory = pluginDir
-	}
-
-	// If the plugin is pinned, skip update.
-	if pSpec.Pin {
-		return upRes
-	}
-
-	updateCmd := exec.Command("git", "-C", pState.Directory, "pull", "--recurse-submodules")
-	if err := updateCmd.Run(); err != nil {
-		upRes.err = fmt.Errorf("git pull failed: %s", err)
-	}
-
-	return upRes
-}
-
 func (pSpec *PluginSpec) fullPath(dataDir string) string {
 	switch pSpec.Opt {
 	case true:
@@ -361,8 +414,8 @@ func (pSpec *PluginSpec) installArgs(fullPath string) []string {
 	return args
 }
 
-func isGitRepo(entry os.DirEntry, baseDir string) bool {
-	gitDir := filepath.Join(baseDir, entry.Name(), ".git")
+func isGitRepo(baseDir, repoName string) bool {
+	gitDir := filepath.Join(baseDir, repoName, ".git")
 	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
 		return false
 	}

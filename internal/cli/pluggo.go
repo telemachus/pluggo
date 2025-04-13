@@ -13,7 +13,7 @@ func Pluggo(args []string) int {
 	cmd := cmdFrom(cmdName, cmdVersion, args)
 
 	plugins := cmd.plugins()
-	cmd.reconcile(plugins)
+	cmd.sync(plugins)
 
 	if cmd.errCount+cmd.warnCount > 0 {
 		return exitFailure
