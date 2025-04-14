@@ -34,7 +34,7 @@ func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
 		return
 	}
 
-	statesByName := cmd.scanDirectories()
+	statesByName := cmd.makeStateMap()
 	specsByName := makeSpecMap(pSpecs)
 
 	cmd.processAll(statesByName, pSpecs)
@@ -54,11 +54,11 @@ func (cmd *cmdEnv) pluginDirExists() bool {
 	return true
 }
 
-func (cmd *cmdEnv) scanDirectories() map[string]*PluginState {
+func (cmd *cmdEnv) makeStateMap() map[string]*PluginState {
 	statesByName := make(map[string]*PluginState, 20)
 
 	for _, dir := range []string{"start", "opt"} {
-		states := cmd.scanSingleDirectory(dir)
+		states := cmd.scanPackDir(dir)
 		for name, state := range states {
 			statesByName[name] = state
 		}
@@ -67,7 +67,7 @@ func (cmd *cmdEnv) scanDirectories() map[string]*PluginState {
 	return statesByName
 }
 
-func (cmd *cmdEnv) scanSingleDirectory(dir string) map[string]*PluginState {
+func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
 	states := make(map[string]*PluginState)
 	baseDir := filepath.Join(cmd.dataDir, dir)
 
@@ -88,7 +88,7 @@ func (cmd *cmdEnv) scanSingleDirectory(dir string) map[string]*PluginState {
 	})
 
 	for _, entry := range entries {
-		if state := cmd.createState(entry, baseDir); state != nil {
+		if state := cmd.createState(baseDir, entry.Name()); state != nil {
 			states[entry.Name()] = state
 		}
 	}
@@ -96,13 +96,13 @@ func (cmd *cmdEnv) scanSingleDirectory(dir string) map[string]*PluginState {
 	return states
 }
 
-func (cmd *cmdEnv) createState(entry os.DirEntry, baseDir string) *PluginState {
-	pluginDir := filepath.Join(baseDir, entry.Name())
+func (cmd *cmdEnv) createState(baseDir, repoName string) *PluginState {
+	pluginDir := filepath.Join(baseDir, repoName)
 
 	url, err := git.URL(pluginDir)
 	if err != nil {
 		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get URL for plugin %s: %s\n", cmd.name, entry.Name(), err)
+		fmt.Fprintf(os.Stderr, "%s: failed to get URL for plugin %s: %s\n", cmd.name, repoName, err)
 
 		return nil
 	}
@@ -110,7 +110,7 @@ func (cmd *cmdEnv) createState(entry os.DirEntry, baseDir string) *PluginState {
 	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
 	if err != nil {
 		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get branch for plugin %s: %s\n", cmd.name, entry.Name(), err)
+		fmt.Fprintf(os.Stderr, "%s: failed to get branch for plugin %s: %s\n", cmd.name, repoName, err)
 
 		return nil
 	}
@@ -119,13 +119,13 @@ func (cmd *cmdEnv) createState(entry os.DirEntry, baseDir string) *PluginState {
 	if err != nil {
 		cmd.warnCount++
 		fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n",
-			cmd.name, entry.Name(), err)
+			cmd.name, repoName, err)
 
 		return nil
 	}
 
 	return &PluginState{
-		Name:      entry.Name(),
+		Name:      repoName,
 		Directory: pluginDir,
 		URL:       url,
 		Branch:    branch,
