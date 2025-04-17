@@ -275,7 +275,6 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 		return
 	}
 
-	upRes.hashBefore = pState.Hash
 	hashAfter, err := git.HeadDigest(pState.Directory)
 	if err != nil {
 		cmd.incrementWarn()
@@ -286,6 +285,8 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 
 		return
 	}
+
+	upRes.hashBefore = pState.Hash
 	upRes.hashAfter = hashAfter
 
 	ch <- result{
