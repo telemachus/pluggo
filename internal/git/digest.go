@@ -3,7 +3,6 @@ package git
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -27,25 +26,19 @@ func HeadDigest(dir string) (Digest, error) {
 	return digest, nil
 }
 
-// HeadDigestString returns a hex encoded string version of a HeadDigest.
-func HeadDigestString(dir string) (string, error) {
-	digest, err := HeadDigest(dir)
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("%x", digest), nil
-}
-
 // Equals checks whether one Digest is identical to another.
 func (d Digest) Equals(other Digest) bool {
 	return bytes.Equal(d, other)
 }
 
+func (d Digest) String() string {
+	return string(d)[:7]
+}
+
 func digestFrom(branchRef string) (Digest, error) {
 	data, err := os.ReadFile(branchRef)
 	if err != nil {
-		return Digest(nil), err
+		return nil, err
 	}
 
 	return Digest(data), nil

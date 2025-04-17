@@ -26,7 +26,17 @@ type PluginState struct {
 	Directory string
 	URL       string
 	Branch    string
-	Hash      string
+	Hash      git.Digest
+}
+
+// updateResult organizes information about the update of one plugin.
+type updateResult struct {
+	err        error
+	hashBefore git.Digest
+	hashAfter  git.Digest
+	moved      bool
+	pin        bool
+	toOpt      bool
 }
 
 func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
@@ -115,7 +125,7 @@ func (cmd *cmdEnv) createState(baseDir, repoName string) *PluginState {
 		return nil
 	}
 
-	hash, err := git.HeadDigestString(pluginDir)
+	hash, err := git.HeadDigest(pluginDir)
 	if err != nil {
 		cmd.warnCount++
 		fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n",
@@ -173,21 +183,16 @@ func findUnwanted(statesByName map[string]*PluginState, specsByName map[string]P
 
 func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 	for pluginName, pluginPath := range unwanted {
-		cmd.remove(pluginName, pluginPath)
-	}
-}
+		if err := os.RemoveAll(pluginPath); err != nil {
+			cmd.warnCount++
+			fmt.Fprintf(os.Stderr, "%s: failed to remove %s: %s\n", cmd.name, pluginName, err)
 
-func (cmd *cmdEnv) remove(pluginName, pluginPath string) {
-	if err := os.RemoveAll(pluginPath); err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to remove %s: %s\n",
-			cmd.name, pluginName, err)
+			continue
+		}
 
-		return
-	}
-
-	if !cmd.quietWanted {
-		fmt.Printf("%s: removed (not in configuration)\n", pluginName)
+		if !cmd.quietWanted {
+			fmt.Printf("%s: removed (not in configuration)\n", pluginName)
+		}
 	}
 }
 
@@ -270,8 +275,8 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 		return
 	}
 
-	hashBefore := pState.Hash
-	hashAfter, err := git.HeadDigestString(pState.Directory)
+	upRes.hashBefore = pState.Hash
+	hashAfter, err := git.HeadDigest(pState.Directory)
 	if err != nil {
 		cmd.incrementWarn()
 		ch <- result{
@@ -281,23 +286,12 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 
 		return
 	}
-
-	upRes.hashBefore = hashBefore[:7]
-	upRes.hashAfter = hashAfter[:7]
+	upRes.hashAfter = hashAfter
 
 	ch <- result{
 		isErr: false,
 		msg:   formatUpdateMsg(pSpec.Name, upRes),
 	}
-}
-
-type updateResult struct {
-	err        error
-	hashBefore string
-	hashAfter  string
-	moved      bool
-	pin        bool
-	toOpt      bool
 }
 
 func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
@@ -377,7 +371,7 @@ func formatUpdateMsg(pluginName string, upRes updateResult) string {
 		return msg.String()
 	}
 
-	if upRes.hashBefore != upRes.hashAfter {
+	if !upRes.hashBefore.Equals(upRes.hashAfter) {
 		if upRes.moved {
 			msg.WriteString(" and updated")
 		} else {
