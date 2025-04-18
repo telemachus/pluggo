@@ -65,6 +65,9 @@ func (cmd *cmdEnv) pluginDirExists() bool {
 }
 
 func (cmd *cmdEnv) makeStateMap() map[string]*PluginState {
+	// We cannot know how many plugins the user works with, but we can
+	// assume that they work with *some* plugins. Twenty seems like
+	// a reasonable initial allocation.
 	statesByName := make(map[string]*PluginState, 20)
 
 	for _, dir := range []string{"start", "opt"} {
@@ -78,11 +81,9 @@ func (cmd *cmdEnv) makeStateMap() map[string]*PluginState {
 }
 
 func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
-	states := make(map[string]*PluginState)
 	baseDir := filepath.Join(cmd.dataDir, dir)
-
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-		return states
+		return nil
 	}
 
 	entries, err := os.ReadDir(baseDir)
@@ -90,16 +91,19 @@ func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
 		cmd.warnCount++
 		fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %s: %s\n", cmd.name, baseDir, err)
 
-		return states
+		return nil
 	}
 
 	entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
 		return !entry.IsDir() || !isGitRepo(baseDir, entry.Name())
 	})
 
+	states := make(map[string]*PluginState, len(entries))
+
 	for _, entry := range entries {
-		if state := cmd.createState(baseDir, entry.Name()); state != nil {
-			states[entry.Name()] = state
+		pluginName := entry.Name()
+		if state := cmd.createState(baseDir, pluginName); state != nil {
+			states[pluginName] = state
 		}
 	}
 
@@ -128,8 +132,7 @@ func (cmd *cmdEnv) createState(baseDir, repoName string) *PluginState {
 	hash, err := git.HeadDigest(pluginDir)
 	if err != nil {
 		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n",
-			cmd.name, repoName, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n", cmd.name, repoName, err)
 
 		return nil
 	}
