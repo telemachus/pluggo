@@ -17,3 +17,17 @@ func URL(repo string) (string, error) {
 
 	return strings.TrimSpace(string(output)), nil
 }
+
+// IsWorkTree reports whether a directory is a git work tree.
+func IsWorkTree(candidate string) bool {
+	cmd := exec.Command("git", "-C", candidate, "rev-parse", "--is-inside-work-tree")
+
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	isWorkTree := strings.TrimSpace(string(output))
+
+	return isWorkTree == "true"
+}

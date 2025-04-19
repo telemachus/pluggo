@@ -11,7 +11,7 @@ import (
 	"github.com/telemachus/pluggo/internal/git"
 )
 
-// PluginSpec represents a plugin in a user's configuration file.
+// PluginSpec represents a plugin specified in a user's configuration file.
 type PluginSpec struct {
 	URL    string
 	Name   string
@@ -20,7 +20,7 @@ type PluginSpec struct {
 	Pin    bool
 }
 
-// PluginState represents a plugin on disk.
+// PluginState represents a plugin installed locally.
 type PluginState struct {
 	Name      string
 	Directory string
@@ -29,13 +29,13 @@ type PluginState struct {
 	Hash      git.Digest
 }
 
-// updateResult organizes information about the update of one plugin.
+// updateResult represents the update of a single plugin.
 type updateResult struct {
 	err        error
 	hashBefore git.Digest
 	hashAfter  git.Digest
 	moved      bool
-	pin        bool
+	pinned     bool
 	toOpt      bool
 }
 
@@ -47,10 +47,10 @@ func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
 	statesByName := cmd.makeStateMap()
 	specsByName := makeSpecMap(pSpecs)
 
-	cmd.processAll(statesByName, pSpecs)
-
 	unwanted := findUnwanted(statesByName, specsByName)
 	cmd.removeAll(unwanted)
+
+	cmd.reconcileLocal(statesByName, pSpecs)
 }
 
 func (cmd *cmdEnv) pluginDirExists() bool {
@@ -72,78 +72,12 @@ func (cmd *cmdEnv) makeStateMap() map[string]*PluginState {
 
 	for _, dir := range []string{"start", "opt"} {
 		states := cmd.scanPackDir(dir)
-		for name, state := range states {
-			statesByName[name] = state
+		for pluginName, state := range states {
+			statesByName[pluginName] = state
 		}
 	}
 
 	return statesByName
-}
-
-func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
-	baseDir := filepath.Join(cmd.dataDir, dir)
-	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-		return nil
-	}
-
-	entries, err := os.ReadDir(baseDir)
-	if err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %s: %s\n", cmd.name, baseDir, err)
-
-		return nil
-	}
-
-	entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
-		return !entry.IsDir() || !isGitRepo(baseDir, entry.Name())
-	})
-
-	states := make(map[string]*PluginState, len(entries))
-
-	for _, entry := range entries {
-		pluginName := entry.Name()
-		if state := cmd.createState(baseDir, pluginName); state != nil {
-			states[pluginName] = state
-		}
-	}
-
-	return states
-}
-
-func (cmd *cmdEnv) createState(baseDir, repoName string) *PluginState {
-	pluginDir := filepath.Join(baseDir, repoName)
-
-	url, err := git.URL(pluginDir)
-	if err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get URL for plugin %s: %s\n", cmd.name, repoName, err)
-
-		return nil
-	}
-
-	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
-	if err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get branch for plugin %s: %s\n", cmd.name, repoName, err)
-
-		return nil
-	}
-
-	hash, err := git.HeadDigest(pluginDir)
-	if err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n", cmd.name, repoName, err)
-
-		return nil
-	}
-
-	return &PluginState{
-		Name:      repoName,
-		Directory: pluginDir,
-		URL:       url,
-		Branch:    branch,
-		Hash:      hash,
-	}
 }
 
 func makeSpecMap(pSpecs []PluginSpec) map[string]PluginSpec {
@@ -155,9 +89,10 @@ func makeSpecMap(pSpecs []PluginSpec) map[string]PluginSpec {
 	return specsByName
 }
 
-func (cmd *cmdEnv) processAll(statesByName map[string]*PluginState, pSpecs []PluginSpec) {
+func (cmd *cmdEnv) reconcileLocal(statesByName map[string]*PluginState, pSpecs []PluginSpec) {
 	ch := make(chan result)
 	for _, spec := range pSpecs {
+		// cmd.reconcile is safe even when statesByName[spec.Name] is nil.
 		go cmd.reconcile(statesByName[spec.Name], spec, ch)
 	}
 
@@ -199,6 +134,74 @@ func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 	}
 }
 
+func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
+	baseDir := filepath.Join(cmd.dataDir, dir)
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %s: %s\n", cmd.name, baseDir, err)
+
+		return nil
+	}
+
+	// Ignore anything that is not a git work tree.
+	entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
+		return !entry.IsDir() || !git.IsWorkTree(filepath.Join(baseDir, entry.Name()))
+	})
+
+	states := make(map[string]*PluginState, len(entries))
+
+	for _, entry := range entries {
+		pluginName := entry.Name()
+		if state := cmd.createState(baseDir, pluginName); state != nil {
+			states[pluginName] = state
+		}
+	}
+
+	return states
+}
+
+func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
+	pluginDir := filepath.Join(baseDir, pluginName)
+
+	url, err := git.URL(pluginDir)
+	if err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to get URL for plugin %s: %s\n", cmd.name, pluginName, err)
+
+		return nil
+	}
+
+	// TODO: the caller should not need to specify ".git" or "HEAD".
+	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
+	if err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to get branch for plugin %s: %s\n", cmd.name, pluginName, err)
+
+		return nil
+	}
+
+	hash, err := git.HeadDigest(pluginDir)
+	if err != nil {
+		cmd.warnCount++
+		fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n", cmd.name, pluginName, err)
+
+		return nil
+	}
+
+	return &PluginState{
+		Name:      pluginName,
+		Directory: pluginDir,
+		URL:       url,
+		Branch:    branch,
+		Hash:      hash,
+	}
+}
+
 func (cmd *cmdEnv) reconcile(pState *PluginState, pSpec PluginSpec, ch chan<- result) {
 	if pState == nil {
 		cmd.manageInstall(pSpec, ch)
@@ -213,21 +216,6 @@ func (cmd *cmdEnv) reconcile(pState *PluginState, pSpec PluginSpec, ch chan<- re
 	}
 
 	cmd.manageUpdate(pState, pSpec, ch)
-}
-
-func (cmd *cmdEnv) hasConfigChanged(pState *PluginState, pSpec PluginSpec) (bool, string) {
-	switch {
-	case pState.URL != pSpec.URL:
-		return true, "repo URL changed"
-	case pState.Branch != pSpec.Branch:
-		return true, fmt.Sprintf(
-			"switching from branch %s to %s",
-			pState.Branch,
-			pSpec.Branch,
-		)
-	default:
-		return false, ""
-	}
 }
 
 func (cmd *cmdEnv) manageInstall(pSpec PluginSpec, ch chan<- result) {
@@ -246,6 +234,17 @@ func (cmd *cmdEnv) manageInstall(pSpec PluginSpec, ch chan<- result) {
 	ch <- result{
 		isErr: false,
 		msg:   fmt.Sprintf("%s: installed", pSpec.Name),
+	}
+}
+
+func (cmd *cmdEnv) hasConfigChanged(pState *PluginState, pSpec PluginSpec) (bool, string) {
+	switch {
+	case pState.URL != pSpec.URL:
+		return true, "plugin URL changed"
+	case pState.Branch != pSpec.Branch:
+		return true, fmt.Sprintf("switching from branch %s to %s", pState.Branch, pSpec.Branch)
+	default:
+		return false, ""
 	}
 }
 
@@ -321,7 +320,7 @@ func (cmd *cmdEnv) reinstall(dir string, pSpec PluginSpec) error {
 }
 
 func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) updateResult {
-	upRes := updateResult{pin: pSpec.Pin}
+	upRes := updateResult{pinned: pSpec.Pin}
 	pluginDir := pSpec.fullPath(cmd.dataDir)
 
 	if pluginDir != pState.Directory {
@@ -365,7 +364,7 @@ func formatUpdateMsg(pluginName string, upRes updateResult) string {
 		msg.WriteString(" moved from opt/ to start/")
 	}
 
-	if upRes.pin {
+	if upRes.pinned {
 		if upRes.moved {
 			msg.WriteString(" and pinned (no update attempted)")
 		} else {
@@ -383,7 +382,7 @@ func formatUpdateMsg(pluginName string, upRes updateResult) string {
 		}
 		msg.WriteString(fmt.Sprintf(" from %s to %s", upRes.hashBefore, upRes.hashAfter))
 	} else {
-		if !upRes.moved && !upRes.pin {
+		if !upRes.moved && !upRes.pinned {
 			msg.WriteString(" already up to date")
 		}
 	}
@@ -410,13 +409,4 @@ func (pSpec *PluginSpec) installArgs(fullPath string) []string {
 	args = append(args, pSpec.URL, fullPath)
 
 	return args
-}
-
-func isGitRepo(baseDir, repoName string) bool {
-	gitDir := filepath.Join(baseDir, repoName, ".git")
-	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		return false
-	}
-
-	return true
 }

@@ -37,15 +37,24 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	og.Bool(&cmd.helpWanted, "h")
 	og.Bool(&cmd.quietWanted, "quiet")
 	og.Bool(&cmd.versionWanted, "version")
+	og.Bool(&cmd.versionWanted, "V")
 
+	// Return if parsing fails or there are leftover arguments.
 	if err := og.Parse(args); err != nil {
 		cmd.errCount++
 		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
 
 		return cmd
 	}
+	extraArgs := og.Args()
+	if err := validate(extraArgs); err != nil {
+		cmd.errCount++
+		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
 
-	// If the user calls for help or version, we're done.
+		return cmd
+	}
+
+	// Return if the user calls for help or version.
 	if cmd.helpWanted {
 		fmt.Print(cmdUsage)
 
@@ -57,16 +66,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 		return cmd
 	}
 
-	// Do not continue if we cannot parse and validate arguments.
-	extraArgs := og.Args()
-	if err := validate(extraArgs); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
-
-		return cmd
-	}
-
-	// Do not continue if we cannot get the user's home directory.
+	// Return if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		cmd.errCount++
@@ -121,7 +121,8 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 	cmd.dataDir = filepath.Join(cfg.DataDirs...)
 
-	// Every repository must specify a URL, a directory name, and a branch.
+	// Every plugin must specify a URL, a directory name, and a branch.
+	// TODO: should we tell the user when we remove a requested plugin?
 	return slices.DeleteFunc(cfg.Plugins, func(pSpec PluginSpec) bool {
 		return pSpec.URL == "" || pSpec.Name == "" || pSpec.Branch == ""
 	})
@@ -165,7 +166,7 @@ Options
     --quiet          Print only error messages
 
 -h, --help           Print this help and exit
-    --version        Print version and exit
+-V, --version        Print version and exit
 
 For more information or to file a bug report, visit https://github.com/telemachus/pluggo
 `
