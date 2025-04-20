@@ -42,7 +42,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	// Return if parsing fails or there are leftover arguments.
 	if err := og.Parse(args); err != nil {
 		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
+		fmt.Fprintf(os.Stderr, "%s: argument parsing error: %s\n", cmd.name, err)
 
 		return cmd
 	}
@@ -70,7 +70,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: cannot get user's home directory: %s\n", cmd.name, err)
+		fmt.Fprintf(os.Stderr, "%s: cannot determine HOME: %s\n", cmd.name, err)
 
 		return cmd
 	}
@@ -96,7 +96,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
 		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to read config file: %s\n", cmd.name, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to read config %q: %s\n", cmd.name, cmd.confFile, err)
 
 		return nil
 	}
@@ -111,7 +111,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
 		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to parse config file: %s\n", cmd.name, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to parse config %q: %s\n", cmd.name, cfg.confFile, err)
 
 		return nil
 	}

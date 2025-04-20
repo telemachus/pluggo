@@ -56,7 +56,7 @@ func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
 func (cmd *cmdEnv) pluginDirExists() bool {
 	if err := os.MkdirAll(cmd.dataDir, os.ModePerm); err != nil {
 		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to create plugin directory: %s\n", cmd.name, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to create plugin directory %q: %s\n", cmd.name, cmd.dataDir, err)
 
 		return false
 	}
@@ -123,7 +123,7 @@ func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 	for pluginName, pluginPath := range unwanted {
 		if err := os.RemoveAll(pluginPath); err != nil {
 			cmd.warnCount++
-			fmt.Fprintf(os.Stderr, "%s: failed to remove %s: %s\n", cmd.name, pluginName, err)
+			fmt.Fprintf(os.Stderr, "%s: failed to remove %q: %s\n", cmd.name, pluginName, err)
 
 			continue
 		}
@@ -143,7 +143,7 @@ func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %s: %s\n", cmd.name, baseDir, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %q: %s\n", cmd.name, baseDir, err)
 
 		return nil
 	}
@@ -171,7 +171,7 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 	url, err := git.URL(pluginDir)
 	if err != nil {
 		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get URL for plugin %s: %s\n", cmd.name, pluginName, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to get URL for %s: %s\n", cmd.name, pluginName, err)
 
 		return nil
 	}
@@ -180,7 +180,7 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
 	if err != nil {
 		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get branch for plugin %s: %s\n", cmd.name, pluginName, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to get branch for %s: %s\n", cmd.name, pluginName, err)
 
 		return nil
 	}
@@ -188,7 +188,7 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 	hash, err := git.HeadDigest(pluginDir)
 	if err != nil {
 		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get hash for plugin %s: %s\n", cmd.name, pluginName, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to get hash for %s: %s\n", cmd.name, pluginName, err)
 
 		return nil
 	}
