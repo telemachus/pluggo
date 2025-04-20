@@ -111,7 +111,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
 		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to parse config %q: %s\n", cmd.name, cfg.confFile, err)
+		fmt.Fprintf(os.Stderr, "%s: failed to parse config %q: %s\n", cmd.name, cmd.confFile, err)
 
 		return nil
 	}
