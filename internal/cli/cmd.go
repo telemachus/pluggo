@@ -102,11 +102,11 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 
 	cfg := struct {
-		Plugins  []PluginSpec `json:"plugins"`
-		DataDirs []string     `json:dataDirs`
+		Plugins []PluginSpec `json:"plugins"`
+		DataDir []string     `json:"dataDir"`
 	}{
-		Plugins:  make([]PluginSpec, 0, 20),
-		DataDirs: make([]string, 0, 10),
+		Plugins: make([]PluginSpec, 0, 20),
+		DataDir: make([]string, 0, 10),
 	}
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
@@ -116,10 +116,10 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 		return nil
 	}
 
-	if len(cfg.DataDirs) >= 1 && cfg.DataDirs[0] == "HOME" {
-		cfg.DataDirs[0] = cmd.homeDir
+	if len(cfg.DataDir) >= 1 && cfg.DataDir[0] == "HOME" {
+		cfg.DataDir[0] = cmd.homeDir
 	}
-	cmd.dataDir = filepath.Join(cfg.DataDirs...)
+	cmd.dataDir = filepath.Join(cfg.DataDir...)
 
 	// Every plugin must specify a URL, a directory name, and a branch.
 	// TODO: should we tell the user when we remove a requested plugin?

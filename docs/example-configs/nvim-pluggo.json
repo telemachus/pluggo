@@ -1,0 +1,29 @@
+{
+    "dataDir": [
+        "HOME",
+        ".local",
+        "share",
+        "nvim",
+        "site",
+        "pack",
+        "pluggo"
+    ],
+    "plugins": [
+        {
+            "branch": "master",
+            "name": "nvim-snippy",
+            "url": "https://github.com/dcampos/nvim-snippy"
+        },
+        {
+            "branch": "master",
+            "name": "vim-startuptime",
+            "opt": true,
+            "url": "https://github.com/dstein64/vim-startuptime"
+        },
+        {
+            "branch": "main",
+            "name": "nvim-treesitter",
+            "url": "https://github.com/nvim-treesitter/nvim-treesitter"
+        }
+    ]
+}
