@@ -148,9 +148,9 @@ func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
 		return nil
 	}
 
-	// Ignore anything that is not a git work tree.
+	// Ignore anything that is not a git repository.
 	entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
-		return !entry.IsDir() || !git.IsWorkTree(filepath.Join(baseDir, entry.Name()))
+		return !git.IsRepo(filepath.Join(baseDir, entry.Name()))
 	})
 
 	states := make(map[string]*PluginState, len(entries))
