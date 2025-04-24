@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"unicode"
 )
 
 // Digest represents a SHA-1 digest as a []byte.
@@ -44,9 +45,6 @@ func digestFrom(branchRef string) (Digest, error) {
 	return Digest(data), nil
 }
 
-func trimLineEnds(data []byte) []byte {
-	data = bytes.ReplaceAll(data, []byte("\n"), []byte(""))
-	data = bytes.ReplaceAll(data, []byte("\r"), []byte(""))
-
-	return data
+func trimLineEnd(data []byte) []byte {
+	return bytes.TrimRightFunc(data, unicode.IsSpace)
 }

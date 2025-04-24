@@ -14,7 +14,7 @@ func BranchRef(headFile string) (string, error) {
 	}
 
 	data = bytes.TrimPrefix(data, []byte("ref: "))
-	data = trimLineEnds(data)
+	data = trimLineEnd(data)
 
 	return string(data), nil
 }
