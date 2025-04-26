@@ -33,7 +33,7 @@ func (d Digest) Equals(other Digest) bool {
 }
 
 func (d Digest) String() string {
-	return string(d)[:7]
+	return string(d)
 }
 
 func digestFrom(branchRef string) (Digest, error) {

@@ -380,7 +380,7 @@ func formatUpdateMsg(pluginName string, upRes updateResult) string {
 		} else {
 			msg.WriteString(" updated")
 		}
-		msg.WriteString(fmt.Sprintf(" from %s to %s", upRes.hashBefore, upRes.hashAfter))
+		msg.WriteString(fmt.Sprintf(" from %.7s to %.7s", upRes.hashBefore, upRes.hashAfter))
 	} else {
 		if !upRes.moved && !upRes.pinned {
 			msg.WriteString(" already up to date")
