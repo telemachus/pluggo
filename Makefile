@@ -1,7 +1,5 @@
 .DEFAULT_GOAL := test
 
-PREFIX := $(HOME)/local/gitmirror
-
 fmt:
 	golangci-lint run --disable-all --no-config -Egofmt --fix
 	golangci-lint run --disable-all --no-config -Egofumpt --fix
