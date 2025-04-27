@@ -11,10 +11,12 @@ import (
 // Digest represents a SHA-1 digest as a []byte.
 type Digest []byte
 
-// HeadDigest follows .git/HEAD to get the SHA digest of a repository's current branch.
+// HeadDigest follows .git/HEAD to get the SHA digest of a repository's current
+// branch. HeadDigest returns an error if the repository is in detached HEAD
+// state or if the digest cannot be determined.
 func HeadDigest(dir string) (Digest, error) {
 	head := filepath.Join(dir, ".git", "HEAD")
-	br, err := BranchRef(head)
+	br, err := branchRef(head)
 	if err != nil {
 		return nil, err
 	}

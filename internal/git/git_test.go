@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -23,23 +24,19 @@ func TestBranchRef(t *testing.T) {
 			headFile:  "testdata/branchHeadFile",
 			branchRef: "refs/heads/someBranch",
 		},
-		"refs/head/detachedHead": {
-			headFile:  "testdata/detachedHeadFile",
-			branchRef: "9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631",
-		},
 	}
 
 	for msg, tc := range testCases {
 		t.Run(msg, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := BranchRef(tc.headFile)
+			got, err := branchRef(tc.headFile)
 			if err != nil {
 				t.Fatalf("%s: %s", tc.headFile, err)
 			}
 
 			if got != tc.branchRef {
-				t.Errorf("BranchRef(%q) = %q; want %q", tc.headFile, got, tc.branchRef)
+				t.Errorf("branchRef(%q) = %q; want %q", tc.headFile, got, tc.branchRef)
 			}
 		})
 	}
@@ -64,10 +61,6 @@ func TestBranchName(t *testing.T) {
 			headFile:   "testdata/branchHeadFile",
 			branchName: "someBranch",
 		},
-		"refs/head/detachedHead": {
-			headFile:   "testdata/detachedHeadFile",
-			branchName: "9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631",
-		},
 	}
 
 	for msg, tc := range testCases {
@@ -83,6 +76,21 @@ func TestBranchName(t *testing.T) {
 				t.Errorf("BranchName(%q) = %q; want %q", tc.headFile, got, tc.branchName)
 			}
 		})
+	}
+}
+
+func TestDetachedHead(t *testing.T) {
+	t.Parallel()
+
+	headFile := "testdata/detachedHeadFile"
+
+	_, err := branchRef(headFile)
+	if err == nil {
+		t.Fatalf("branchRef(%q) returns nil error; want ErrDetachedHead", headFile)
+	}
+
+	if !errors.Is(err, ErrDetachedHead) {
+		t.Errorf("branchRef(%q) returns wrong error; want ErrDetachedHead", headFile)
 	}
 }
 
