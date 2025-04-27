@@ -55,8 +55,8 @@ func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
 
 func (cmd *cmdEnv) pluginDirExists() bool {
 	if err := os.MkdirAll(cmd.dataDir, os.ModePerm); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to create plugin directory %q: %s\n", cmd.name, cmd.dataDir, err)
+		reason := fmt.Sprintf("cannot create plugin directory %q", cmd.dataDir)
+		cmd.reportError("aborting", reason, err)
 
 		return false
 	}
@@ -122,8 +122,8 @@ func findUnwanted(statesByName map[string]*PluginState, specsByName map[string]P
 func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 	for pluginName, pluginPath := range unwanted {
 		if err := os.RemoveAll(pluginPath); err != nil {
-			cmd.warnCount++
-			fmt.Fprintf(os.Stderr, "%s: failed to remove %q: %s\n", cmd.name, pluginName, err)
+			action := fmt.Sprintf("skipping %q", pluginName)
+			cmd.reportWarning(action, "failed to remove plugin", err)
 
 			continue
 		}
@@ -142,8 +142,8 @@ func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
 
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to read plugin directory %q: %s\n", cmd.name, baseDir, err)
+		action := fmt.Sprintf("skipping %q", baseDir)
+		cmd.reportWarning(action, "cannot read directory", err)
 
 		return nil
 	}
@@ -170,8 +170,8 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 
 	url, err := git.URL(pluginDir)
 	if err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get URL for %s: %s\n", cmd.name, pluginName, err)
+		action := fmt.Sprintf("skipping %q", pluginName)
+		cmd.reportWarning(action, "cannot determine URL", err)
 
 		return nil
 	}
@@ -179,16 +179,16 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 	// TODO: the caller should not need to specify ".git" or "HEAD".
 	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
 	if err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get branch for %s: %s\n", cmd.name, pluginName, err)
+		action := fmt.Sprintf("skipping %q", pluginName)
+		cmd.reportWarning(action, "cannot determine branch", err)
 
 		return nil
 	}
 
 	hash, err := git.HeadDigest(pluginDir)
 	if err != nil {
-		cmd.warnCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to get hash for %s: %s\n", cmd.name, pluginName, err)
+		action := fmt.Sprintf("skipping %q", pluginName)
+		cmd.reportWarning(action, "cannot determine SHA", err)
 
 		return nil
 	}

@@ -22,6 +22,7 @@ type cmdEnv struct {
 	dataDir       string
 	errCount      int
 	warnCount     int
+	debugWanted   bool
 	helpWanted    bool
 	quietWanted   bool
 	versionWanted bool
@@ -33,6 +34,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 
 	og := opts.NewGroup(cmd.name)
 	og.String(&cmd.confFile, "config", "")
+	og.Bool(&cmd.debugWanted, "debug")
 	og.Bool(&cmd.helpWanted, "help")
 	og.Bool(&cmd.helpWanted, "h")
 	og.Bool(&cmd.quietWanted, "quiet")
@@ -41,15 +43,14 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 
 	// Return if parsing fails or there are leftover arguments.
 	if err := og.Parse(args); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: argument parsing error: %s\n", cmd.name, err)
+		cmd.reportError("aborting", "argument parsing error", err)
 
 		return cmd
 	}
 	extraArgs := og.Args()
 	if err := validate(extraArgs); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
+		// In this case, the error has a message for users.
+		cmd.reportError("aborting", err.Error(), nil)
 
 		return cmd
 	}
@@ -69,8 +70,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	// Return if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: cannot determine HOME: %s\n", cmd.name, err)
+		cmd.reportError("aborting", "cannot determing HOME", err)
 
 		return cmd
 	}
@@ -95,8 +95,8 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to read config %q: %s\n", cmd.name, cmd.confFile, err)
+		reason := fmt.Sprintf("cannot read config %q", cmd.confFile)
+		cmd.reportError("aborting", reason, err)
 
 		return nil
 	}
@@ -110,8 +110,8 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to parse config %q: %s\n", cmd.name, cmd.confFile, err)
+		reason := fmt.Sprintf("cannot parse config %q", cmd.confFile)
+		cmd.reportError("aborting", reason, err)
 
 		return nil
 	}
@@ -126,6 +126,24 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	return slices.DeleteFunc(cfg.Plugins, func(pSpec PluginSpec) bool {
 		return pSpec.URL == "" || pSpec.Name == "" || pSpec.Branch == ""
 	})
+}
+
+func (cmd *cmdEnv) reportWarning(action, reason string, err error) {
+	cmd.warnCount++
+	cmd.report(action, reason, err)
+}
+
+func (cmd *cmdEnv) reportError(action, reason string, err error) {
+	cmd.errCount++
+	cmd.report(action, reason, err)
+}
+
+func (cmd *cmdEnv) report(action, reason string, err error) {
+	if cmd.debugWanted && err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s: %s: %s\n", cmd.name, action, reason, err)
+	} else {
+		fmt.Fprintf(os.Stderr, "%s: %s: %s\n", cmd.name, action, reason)
+	}
 }
 
 func (cmd *cmdEnv) incrementWarn() {
@@ -164,6 +182,7 @@ Manage Vim or Neovim plugins
 Options
     --config=FILE    Use FILE as config file (default ~/.pluggo.json)
     --quiet          Print only error messages
+    --debug          Print additional low-level error messages
 
 -h, --help           Print this help and exit
 -V, --version        Print version and exit
