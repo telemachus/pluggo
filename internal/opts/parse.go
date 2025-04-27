@@ -32,7 +32,7 @@ func (g *Group) Parse(args []string) error {
 		g.parsed = true
 	} else {
 		g.args = []string{}
-		// TODO: clear the options map?
+		clear(g.opts)
 	}
 
 	return err

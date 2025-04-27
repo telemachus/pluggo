@@ -37,7 +37,6 @@ func validateName(funcName, optName string) error {
 
 func (g *Group) optAlreadySet(name string) error {
 	if _, exists := g.opts[name]; exists {
-		// TODO: quote the flag?
 		return fmt.Errorf("opts: --%s already set", name)
 	}
 
