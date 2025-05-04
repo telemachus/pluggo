@@ -40,7 +40,7 @@ type updateResult struct {
 }
 
 func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
-	if cmd.noOp() || !cmd.pluginDirExists() {
+	if cmd.noOp() || !cmd.ensurePluginDirs() {
 		return
 	}
 
@@ -53,12 +53,15 @@ func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
 	cmd.reconcileLocal(statesByName, pSpecs)
 }
 
-func (cmd *cmdEnv) pluginDirExists() bool {
-	if err := os.MkdirAll(cmd.dataDir, os.ModePerm); err != nil {
-		reason := fmt.Sprintf("cannot create plugin directory %q", cmd.dataDir)
-		cmd.reportError("aborting", reason, err)
+func (cmd *cmdEnv) ensurePluginDirs() bool {
+	for _, subDir := range []string{"start", "opt"} {
+		wantedDir := filepath.Join(cmd.dataDir, subDir)
+		if err := os.MkdirAll(wantedDir, os.ModePerm); err != nil {
+			reason := fmt.Sprintf("cannot create directory %q", wantedDir)
+			cmd.reportError("aborting", reason, err)
 
-		return false
+			return false
+		}
 	}
 
 	return true
@@ -168,28 +171,18 @@ func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
 func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 	pluginDir := filepath.Join(baseDir, pluginName)
 
-	url, err := git.URL(pluginDir)
+	url, err := cmd.getPluginURL(pluginDir, pluginName)
 	if err != nil {
-		action := fmt.Sprintf("skipping %q", pluginName)
-		cmd.reportWarning(action, "cannot determine URL", err)
-
 		return nil
 	}
 
-	// TODO: the caller should not need to specify ".git" or "HEAD".
-	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
+	branch, err := cmd.getPluginBranch(pluginDir, pluginName)
 	if err != nil {
-		action := fmt.Sprintf("skipping %q", pluginName)
-		cmd.reportWarning(action, "cannot determine branch", err)
-
 		return nil
 	}
 
-	hash, err := git.HeadDigest(pluginDir)
+	hash, err := cmd.getPluginHash(pluginDir, pluginName)
 	if err != nil {
-		action := fmt.Sprintf("skipping %q", pluginName)
-		cmd.reportWarning(action, "cannot determine SHA", err)
-
 		return nil
 	}
 
@@ -200,6 +193,43 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 		Branch:    branch,
 		Hash:      hash,
 	}
+}
+
+func (cmd *cmdEnv) getPluginURL(pluginDir, pluginName string) (string, error) {
+	url, err := git.URL(pluginDir)
+	if err != nil {
+		action := fmt.Sprintf("skipping %q", pluginName)
+		cmd.reportWarning(action, "cannot determine URL", err)
+
+		return "", err
+	}
+
+	return url, nil
+}
+
+func (cmd *cmdEnv) getPluginBranch(pluginDir, pluginName string) (string, error) {
+	// TODO: the caller should not need to specify ".git" or "HEAD".
+	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
+	if err != nil {
+		action := fmt.Sprintf("skipping %q", pluginName)
+		cmd.reportWarning(action, "cannot determine branch", err)
+
+		return "", err
+	}
+
+	return branch, nil
+}
+
+func (cmd *cmdEnv) getPluginHash(pluginDir, pluginName string) (git.Digest, error) {
+	hash, err := git.HeadDigest(pluginDir)
+	if err != nil {
+		action := fmt.Sprintf("skipping %q", pluginName)
+		cmd.reportWarning(action, "cannot determine SHA", err)
+
+		return git.Digest{}, err
+	}
+
+	return hash, nil
 }
 
 func (cmd *cmdEnv) reconcile(pState *PluginState, pSpec PluginSpec, ch chan<- result) {
@@ -298,12 +328,7 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 }
 
 func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
-	if err := os.MkdirAll(filepath.Dir(dir), os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	args := pSpec.installArgs(dir)
-	gitCmd := exec.Command("git", args...)
+	gitCmd := exec.Command("git", "clone", "--filter=blob:none", "-b", pSpec.Branch, pSpec.URL, dir)
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("git clone failed: %s", err)
 	}
@@ -320,24 +345,11 @@ func (cmd *cmdEnv) reinstall(dir string, pSpec PluginSpec) error {
 }
 
 func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) updateResult {
-	upRes := updateResult{pinned: pSpec.Pin}
-	pluginDir := pSpec.fullPath(cmd.dataDir)
-
-	if pluginDir != pState.Directory {
-		upRes.moved = true
-		upRes.toOpt = pSpec.Opt
-
-		if err := os.MkdirAll(filepath.Dir(pluginDir), os.ModePerm); err != nil {
-			upRes.err = fmt.Errorf("failed to create parent directory for move: %w", err)
-			return upRes
-		}
-
-		if err := os.Rename(pState.Directory, pluginDir); err != nil {
-			upRes.err = fmt.Errorf("failed to move plugin directory: %w", err)
-			return upRes
-		}
-
-		pState.Directory = pluginDir
+	// Move between start/ and opt/ subdirectories as needed; return early
+	// if the move fails.
+	upRes, err := cmd.ensureSubDir(pState, pSpec)
+	if err != nil {
+		return upRes
 	}
 
 	if pSpec.Pin {
@@ -350,6 +362,29 @@ func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) updateResult {
 	}
 
 	return upRes
+}
+
+func (cmd *cmdEnv) ensureSubDir(pState *PluginState, pSpec PluginSpec) (updateResult, error) {
+	upRes := updateResult{pinned: pSpec.Pin}
+	pSpecPath := pSpec.fullPath(cmd.dataDir)
+
+	// Return early if the directory is already in the right place.
+	if pSpecPath == pState.Directory {
+		return upRes, nil
+	}
+
+	upRes.moved = true
+	upRes.toOpt = pSpec.Opt
+
+	if err := os.Rename(pState.Directory, pSpecPath); err != nil {
+		upRes.err = err
+
+		return upRes, err
+	}
+
+	pState.Directory = pSpecPath
+
+	return upRes, nil
 }
 
 func formatUpdateMsg(pluginName string, upRes updateResult) string {
@@ -397,16 +432,4 @@ func (pSpec *PluginSpec) fullPath(dataDir string) string {
 	default:
 		return filepath.Join(dataDir, "start", pSpec.Name)
 	}
-}
-
-func (pSpec *PluginSpec) installArgs(fullPath string) []string {
-	args := make([]string, 0, 6)
-
-	args = append(args, "clone", "--filter=blob:none")
-	if pSpec.Branch != "" {
-		args = append(args, "-b", pSpec.Branch)
-	}
-	args = append(args, pSpec.URL, fullPath)
-
-	return args
 }
