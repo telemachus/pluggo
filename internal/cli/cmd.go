@@ -70,7 +70,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	// Return if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		cmd.reportError("aborting", "cannot determing HOME", err)
+		cmd.reportError("aborting", "cannot determine HOME", err)
 
 		return cmd
 	}
@@ -121,8 +121,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 	cmd.dataDir = filepath.Join(cfg.DataDir...)
 
-	// Every plugin must specify a URL, a directory name, and a branch.
-	// TODO: should we tell the user when we remove a requested plugin?
+	// Every plugin must specify a URL, a name, and a branch.
 	return slices.DeleteFunc(cfg.Plugins, func(pSpec PluginSpec) bool {
 		return pSpec.URL == "" || pSpec.Name == "" || pSpec.Branch == ""
 	})
