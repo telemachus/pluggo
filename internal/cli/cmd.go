@@ -192,13 +192,15 @@ var cmdUsage = `usage: pluggo [options]
 
 Manage Vim or Neovim plugins
 
-Options
-    --config=FILE    Use FILE as config file (default ~/.pluggo.json)
-    --quiet          Print only error messages
-    --debug          Print additional low-level error messages
+Options:
+      --config=FILE	Use FILE as config file (default ~/.pluggo.json)
+      --quiet		Print only error messages
+      --debug		Print additional low-level error messages
 
--h, --help           Print this help and exit
--V, --version        Print version and exit
+
+General:
+  -h, --help		Print this help and exit
+  -V, --version		Print version and exit
 
 For more information or to file a bug report, visit https://github.com/telemachus/pluggo
 `
