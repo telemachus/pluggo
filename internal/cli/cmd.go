@@ -166,12 +166,18 @@ func validate(extra []string) error {
 }
 
 func quotedSlice(items []string) string {
-	quotedSlice := make([]string, len(items))
-	for i, str := range items {
-		quotedSlice[i] = strconv.Quote(str)
+	if len(items) == 0 {
+		return ""
 	}
 
-	return strings.Join(quotedSlice, " ")
+	var b strings.Builder
+	b.WriteString(strconv.Quote(items[0]))
+	for _, str := range items[1:] {
+		b.WriteString(" ")
+		b.WriteString(strconv.Quote(str))
+	}
+
+	return b.String()
 }
 
 func (cmd *cmdEnv) resolveExitValue() int {

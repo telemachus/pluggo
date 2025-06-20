@@ -80,6 +80,8 @@ func (cmd *cmdEnv) ensureSubDir(pState *PluginState, pSpec PluginSpec) (updateRe
 
 func formatUpdateMsg(pluginName string, upRes updateResult) string {
 	var msg strings.Builder
+	msg.Grow(len(pluginName) + 50)
+
 	msg.WriteString(pluginName)
 	msg.WriteString(":")
 
