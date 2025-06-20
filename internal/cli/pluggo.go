@@ -15,9 +15,5 @@ func Pluggo(args []string) int {
 	plugins := cmd.plugins()
 	cmd.sync(plugins)
 
-	if cmd.errCount+cmd.warnCount > 0 {
-		return exitFailure
-	}
-
-	return exitSuccess
+	return cmd.resolveExitValue()
 }

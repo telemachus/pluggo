@@ -1,4 +1,8 @@
 linters-settings:
+  cyclop:
+    max-complexity: 10
+    package-average: 0.0
+    skip-tests: false
   copyloopvar:
     check-alias: true
   depguard:
@@ -31,6 +35,7 @@ linters-settings:
   gocritic:
     disabled-checks:
       - hugeParam
+      - unnamedResult
     enabled-tags:
       - diagnostic
       - experimental
@@ -86,7 +91,3 @@ run:
   timeout: 30m
   tests: true
   allow-parallel-runners: false
-
-issues:
-  exclude-dirs:
-    - internal

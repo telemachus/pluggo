@@ -58,7 +58,7 @@ func (cmd *cmdEnv) ensurePluginDirs() bool {
 		wantedDir := filepath.Join(cmd.dataDir, subDir)
 		if err := os.MkdirAll(wantedDir, os.ModePerm); err != nil {
 			reason := fmt.Sprintf("cannot create directory %q", wantedDir)
-			cmd.reportError("aborting", reason, err)
+			cmd.reportError(reason, err)
 
 			return false
 		}
@@ -328,9 +328,10 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 }
 
 func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
+	//nolint:gosec // pSpec.Branch and pSpec.URL come from user's own config file
 	gitCmd := exec.Command("git", "clone", "--filter=blob:none", "-b", pSpec.Branch, pSpec.URL, dir)
 	if err := gitCmd.Run(); err != nil {
-		return fmt.Errorf("git clone failed: %s", err)
+		return fmt.Errorf("git clone failed: %w", err)
 	}
 
 	return nil
@@ -356,9 +357,10 @@ func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) updateResult {
 		return upRes
 	}
 
+	//nolint:gosec // pSpec.Directory comes from user's own config file
 	updateCmd := exec.Command("git", "-C", pState.Directory, "pull", "--recurse-submodules")
 	if err := updateCmd.Run(); err != nil {
-		upRes.err = fmt.Errorf("git pull failed: %s", err)
+		upRes.err = fmt.Errorf("git pull failed: %w", err)
 	}
 
 	return upRes
@@ -416,10 +418,8 @@ func formatUpdateMsg(pluginName string, upRes updateResult) string {
 			msg.WriteString(" updated")
 		}
 		msg.WriteString(fmt.Sprintf(" from %.7s to %.7s", upRes.hashBefore, upRes.hashAfter))
-	} else {
-		if !upRes.moved && !upRes.pinned {
-			msg.WriteString(" already up to date")
-		}
+	} else if !upRes.moved && !upRes.pinned {
+		msg.WriteString(" already up to date")
 	}
 
 	return msg.String()

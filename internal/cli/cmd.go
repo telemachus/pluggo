@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/telemachus/pluggo/internal/opts"
+	"github.com/telemachus/opts"
 )
 
 type cmdEnv struct {
@@ -43,14 +43,14 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 
 	// Return if parsing fails or there are leftover arguments.
 	if err := og.Parse(args); err != nil {
-		cmd.reportError("aborting", "argument parsing error", err)
+		cmd.reportError("argument parsing error", err)
 
 		return cmd
 	}
 	extraArgs := og.Args()
 	if err := validate(extraArgs); err != nil {
 		// In this case, the error has a message for users.
-		cmd.reportError("aborting", err.Error(), nil)
+		cmd.reportError(err.Error(), nil)
 
 		return cmd
 	}
@@ -70,7 +70,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	// Return if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		cmd.reportError("aborting", "cannot determine HOME", err)
+		cmd.reportError("cannot determine HOME", err)
 
 		return cmd
 	}
@@ -96,7 +96,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
 		reason := fmt.Sprintf("cannot read config %q", cmd.confFile)
-		cmd.reportError("aborting", reason, err)
+		cmd.reportError(reason, err)
 
 		return nil
 	}
@@ -111,7 +111,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
 		reason := fmt.Sprintf("cannot parse config %q", cmd.confFile)
-		cmd.reportError("aborting", reason, err)
+		cmd.reportError(reason, err)
 
 		return nil
 	}
@@ -132,9 +132,9 @@ func (cmd *cmdEnv) reportWarning(action, reason string, err error) {
 	cmd.report(action, reason, err)
 }
 
-func (cmd *cmdEnv) reportError(action, reason string, err error) {
+func (cmd *cmdEnv) reportError(reason string, err error) {
 	cmd.errCount++
-	cmd.report(action, reason, err)
+	cmd.report("aborting", reason, err)
 }
 
 func (cmd *cmdEnv) report(action, reason string, err error) {
@@ -172,6 +172,14 @@ func quotedSlice(items []string) string {
 	}
 
 	return strings.Join(quotedSlice, " ")
+}
+
+func (cmd *cmdEnv) resolveExitValue() int {
+	if cmd.errCount+cmd.warnCount > 0 {
+		return exitFailure
+	}
+
+	return exitSuccess
 }
 
 var cmdUsage = `usage: pluggo [options]
