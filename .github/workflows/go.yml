@@ -1,4 +1,4 @@
-name: gitmirror test
+name: pluggo test
 on:
   push:
   pull_request:

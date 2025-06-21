@@ -45,20 +45,16 @@ func TestGetPluginsFailure(t *testing.T) {
 	}
 }
 
-func TestRepoChecks(t *testing.T) {
+func TestPluginChecks(t *testing.T) {
 	confFile := "testdata/plugin-checks.json"
 	cmd := fakeCmdEnv(confFile)
 
-	actual := cmd.plugins()
+	plugins := cmd.plugins()
 	if cmd.errCount > 0 {
 		t.Fatal("test cannot finish since cmd.plugins() failed")
 	}
 
-	if len(actual) != 1 {
-		t.Errorf(
-			"cmd.plugins(%q) expected len(repos) = 1; actual: %d",
-			confFile,
-			len(actual),
-		)
+	if len(plugins) != 1 {
+		t.Errorf("cmd.plugins(%q) expected len(plugins) = 1; actual: %d", confFile, len(plugins))
 	}
 }

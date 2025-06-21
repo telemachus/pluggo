@@ -13,8 +13,10 @@ type result struct {
 func (r result) publish() {
 	if r.isErr {
 		fmt.Fprintln(os.Stderr, r.msg)
+
 		return
 	}
+
 	fmt.Fprintln(os.Stdout, r.msg)
 }
 

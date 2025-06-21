@@ -1,2 +1,4 @@
-github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
-github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
+github.com/telemachus/opts v0.1.0 h1:F3/YC4afzFdJT6n5riUL1x1WLdk3OPCRBQShWxnN3bY=
+github.com/telemachus/opts v0.1.0/go.mod h1:zciITmmPLfwyvj9LhuXmG5XWGVjHEHnXOoqTKOF41NU=

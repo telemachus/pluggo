@@ -3,22 +3,22 @@
         {
             "branch": "main",
             "name": "",
-            "url": "https://github.com/user/repo.git"
+            "url": "https://github.com/user/plugin.git"
         },
         {
             "branch": "master",
-            "name": "repo.git",
+            "name": "plugin.git",
             "url": ""
         },
         {
             "branch": "",
-            "name": "repo.git",
-            "url": "https://github.com/user/repo.git"
+            "name": "plugin.git",
+            "url": "https://github.com/user/plugin.git"
         },
         {
             "branch": "main",
-            "name": "repo.git",
-            "url": "https://github.com/user/repo.git"
+            "name": "plugin.git",
+            "url": "https://github.com/user/plugin.git"
         }
     ]
 }

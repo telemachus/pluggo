@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/telemachus/pluggo/internal/opts"
+	"github.com/telemachus/opts"
 )
 
 type cmdEnv struct {
@@ -22,6 +22,7 @@ type cmdEnv struct {
 	dataDir       string
 	errCount      int
 	warnCount     int
+	debugWanted   bool
 	helpWanted    bool
 	quietWanted   bool
 	versionWanted bool
@@ -33,19 +34,28 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 
 	og := opts.NewGroup(cmd.name)
 	og.String(&cmd.confFile, "config", "")
+	og.Bool(&cmd.debugWanted, "debug")
 	og.Bool(&cmd.helpWanted, "help")
 	og.Bool(&cmd.helpWanted, "h")
 	og.Bool(&cmd.quietWanted, "quiet")
 	og.Bool(&cmd.versionWanted, "version")
+	og.Bool(&cmd.versionWanted, "V")
 
+	// Return if parsing fails or there are leftover arguments.
 	if err := og.Parse(args); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
+		cmd.reportError("argument parsing error", err)
+
+		return cmd
+	}
+	extraArgs := og.Args()
+	if err := validate(extraArgs); err != nil {
+		// In this case, the error has a message for users.
+		cmd.reportError(err.Error(), nil)
 
 		return cmd
 	}
 
-	// If the user calls for help or version, we're done.
+	// Return if the user calls for help or version.
 	if cmd.helpWanted {
 		fmt.Print(cmdUsage)
 
@@ -57,20 +67,10 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 		return cmd
 	}
 
-	// Do not continue if we cannot parse and validate arguments.
-	extraArgs := og.Args()
-	if err := validate(extraArgs); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, err)
-
-		return cmd
-	}
-
-	// Do not continue if we cannot get the user's home directory.
+	// Return if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: cannot get user's home directory: %s\n", cmd.name, err)
+		cmd.reportError("cannot determine HOME", err)
 
 		return cmd
 	}
@@ -95,36 +95,54 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to read config file: %s\n", cmd.name, err)
+		reason := fmt.Sprintf("cannot read config %q", cmd.confFile)
+		cmd.reportError(reason, err)
 
 		return nil
 	}
 
 	cfg := struct {
-		Plugins  []PluginSpec `json:"plugins"`
-		DataDirs []string     `json:dataDirs`
+		Plugins []PluginSpec `json:"plugins"`
+		DataDir []string     `json:"dataDir"`
 	}{
-		Plugins:  make([]PluginSpec, 0, 20),
-		DataDirs: make([]string, 0, 10),
+		Plugins: make([]PluginSpec, 0, 20),
+		DataDir: make([]string, 0, 10),
 	}
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
-		cmd.errCount++
-		fmt.Fprintf(os.Stderr, "%s: failed to parse config file: %s\n", cmd.name, err)
+		reason := fmt.Sprintf("cannot parse config %q", cmd.confFile)
+		cmd.reportError(reason, err)
 
 		return nil
 	}
 
-	if len(cfg.DataDirs) >= 1 && cfg.DataDirs[0] == "HOME" {
-		cfg.DataDirs[0] = cmd.homeDir
+	if len(cfg.DataDir) >= 1 && cfg.DataDir[0] == "HOME" {
+		cfg.DataDir[0] = cmd.homeDir
 	}
-	cmd.dataDir = filepath.Join(cfg.DataDirs...)
+	cmd.dataDir = filepath.Join(cfg.DataDir...)
 
-	// Every repository must specify a URL, a directory name, and a branch.
+	// Every plugin must specify a URL, a name, and a branch.
 	return slices.DeleteFunc(cfg.Plugins, func(pSpec PluginSpec) bool {
 		return pSpec.URL == "" || pSpec.Name == "" || pSpec.Branch == ""
 	})
+}
+
+func (cmd *cmdEnv) reportWarning(action, reason string, err error) {
+	cmd.warnCount++
+	cmd.report(action, reason, err)
+}
+
+func (cmd *cmdEnv) reportError(reason string, err error) {
+	cmd.errCount++
+	cmd.report("aborting", reason, err)
+}
+
+func (cmd *cmdEnv) report(action, reason string, err error) {
+	if cmd.debugWanted && err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s: %s: %s\n", cmd.name, action, reason, err)
+	} else {
+		fmt.Fprintf(os.Stderr, "%s: %s: %s\n", cmd.name, action, reason)
+	}
 }
 
 func (cmd *cmdEnv) incrementWarn() {
@@ -148,24 +166,41 @@ func validate(extra []string) error {
 }
 
 func quotedSlice(items []string) string {
-	quotedSlice := make([]string, len(items))
-	for i, str := range items {
-		quotedSlice[i] = strconv.Quote(str)
+	if len(items) == 0 {
+		return ""
 	}
 
-	return strings.Join(quotedSlice, " ")
+	var b strings.Builder
+	b.WriteString(strconv.Quote(items[0]))
+	for _, str := range items[1:] {
+		b.WriteString(" ")
+		b.WriteString(strconv.Quote(str))
+	}
+
+	return b.String()
+}
+
+func (cmd *cmdEnv) resolveExitValue() int {
+	if cmd.errCount+cmd.warnCount > 0 {
+		return exitFailure
+	}
+
+	return exitSuccess
 }
 
 var cmdUsage = `usage: pluggo [options]
 
 Manage Vim or Neovim plugins
 
-Options
-    --config=FILE    Use FILE as config file (default ~/.pluggo.json)
-    --quiet          Print only error messages
+Options:
+      --config=FILE	Use FILE as config file (default ~/.pluggo.json)
+      --quiet		Print only error messages
+      --debug		Print additional low-level error messages
 
--h, --help           Print this help and exit
-    --version        Print version and exit
+
+General:
+  -h, --help		Print this help and exit
+  -V, --version		Print version and exit
 
 For more information or to file a bug report, visit https://github.com/telemachus/pluggo
 `
