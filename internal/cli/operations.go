@@ -25,6 +25,7 @@ func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
 	if err := gitCmd.Run(); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
+
 	return nil
 }
 
@@ -32,6 +33,7 @@ func (cmd *cmdEnv) reinstall(dir string, pSpec PluginSpec) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("failed to remove existing directory: %w", err)
 	}
+
 	return cmd.install(pSpec, pSpec.fullPath(cmd.dataDir))
 }
 
@@ -43,6 +45,7 @@ func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) updateResult {
 		return upRes
 	}
 
+	// Return early if we only needed to move.
 	if pSpec.Pin {
 		return upRes
 	}

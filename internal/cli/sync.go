@@ -37,9 +37,11 @@ func (cmd *cmdEnv) ensurePluginDirs() bool {
 		if err := os.MkdirAll(wantedDir, os.ModePerm); err != nil {
 			reason := fmt.Sprintf("cannot create directory %q", wantedDir)
 			cmd.reportError(reason, err)
+
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -48,6 +50,7 @@ func makeSpecMap(pSpecs []PluginSpec) map[string]PluginSpec {
 	for _, p := range pSpecs {
 		specsByName[p.Name] = p
 	}
+
 	return specsByName
 }
 
@@ -86,6 +89,7 @@ func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 		if err := os.RemoveAll(pluginPath); err != nil {
 			action := fmt.Sprintf("skipping %q", pluginName)
 			cmd.reportWarning(action, "failed to remove plugin", err)
+
 			continue
 		}
 
@@ -98,11 +102,13 @@ func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 func (cmd *cmdEnv) reconcile(pState *PluginState, pSpec PluginSpec, ch chan<- result) {
 	if pState == nil {
 		cmd.manageInstall(pSpec, ch)
+
 		return
 	}
 
 	if changed, reason := cmd.hasConfigChanged(pState, pSpec); changed {
 		cmd.manageReinstall(pState, pSpec, reason, ch)
+
 		return
 	}
 
@@ -118,6 +124,7 @@ func (cmd *cmdEnv) manageInstall(pSpec PluginSpec, ch chan<- result) {
 			isErr: true,
 			msg:   fmt.Sprintf("failed to install %s: %s", pSpec.Name, err),
 		}
+
 		return
 	}
 
@@ -145,6 +152,7 @@ func (cmd *cmdEnv) manageReinstall(pState *PluginState, pSpec PluginSpec, reason
 			isErr: true,
 			msg:   fmt.Sprintf("failed to reinstall %s: %s", pSpec.Name, err),
 		}
+
 		return
 	}
 
@@ -162,16 +170,18 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 			isErr: true,
 			msg:   fmt.Sprintf("failed to update %s: %s", pSpec.Name, upRes.err),
 		}
+
 		return
 	}
 
-	hashAfter, err := git.HeadDigest(pState.Directory)
+	hashAfter, err := git.HeadDigest(pState.Directory, git.DefaultFileReader)
 	if err != nil {
 		cmd.incrementWarn()
 		ch <- result{
 			isErr: true,
 			msg:   fmt.Sprintf("failed to get updated hash for %s: %s", pSpec.Name, err),
 		}
+
 		return
 	}
 

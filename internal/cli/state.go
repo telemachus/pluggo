@@ -72,13 +72,10 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 		return nil
 	}
 
-	branch, err := cmd.getPluginBranch(pluginDir, pluginName)
+	info, err := git.GetBranchInfo(pluginDir, git.DefaultFileReader)
 	if err != nil {
-		return nil
-	}
-
-	hash, err := cmd.getPluginHash(pluginDir, pluginName)
-	if err != nil {
+		action := fmt.Sprintf("skipping %q", pluginName)
+		cmd.reportWarning(action, "cannot determine repo state", err)
 		return nil
 	}
 
@@ -86,8 +83,8 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 		Name:      pluginName,
 		Directory: pluginDir,
 		URL:       url,
-		Branch:    branch,
-		Hash:      hash,
+		Branch:    info.Branch,
+		Hash:      info.Hash,
 	}
 }
 
@@ -95,29 +92,8 @@ func (cmd *cmdEnv) getPluginURL(pluginDir, pluginName string) (string, error) {
 	url, err := git.URL(pluginDir)
 	if err != nil {
 		action := fmt.Sprintf("skipping %q", pluginName)
-		cmd.reportWarning(action, "cannot determine URL", err)
+		cmd.reportWarning(action, "cannot determine repo URL", err)
 		return "", err
 	}
 	return url, nil
-}
-
-func (cmd *cmdEnv) getPluginBranch(pluginDir, pluginName string) (string, error) {
-	// TODO: the caller should not need to specify ".git" or "HEAD".
-	branch, err := git.BranchName(filepath.Join(pluginDir, ".git", "HEAD"))
-	if err != nil {
-		action := fmt.Sprintf("skipping %q", pluginName)
-		cmd.reportWarning(action, "cannot determine branch", err)
-		return "", err
-	}
-	return branch, nil
-}
-
-func (cmd *cmdEnv) getPluginHash(pluginDir, pluginName string) (git.Digest, error) {
-	hash, err := git.HeadDigest(pluginDir)
-	if err != nil {
-		action := fmt.Sprintf("skipping %q", pluginName)
-		cmd.reportWarning(action, "cannot determine SHA", err)
-		return git.Digest{}, err
-	}
-	return hash, nil
 }
