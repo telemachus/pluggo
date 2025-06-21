@@ -3,6 +3,7 @@ package git_test
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/telemachus/pluggo/internal/git"
@@ -32,8 +33,8 @@ func TestGetBranchInfo(t *testing.T) {
 	}{
 		"main branch": {
 			files: map[string][]byte{
-				"repo/.git/HEAD":            []byte("ref: refs/heads/main\n"),
-				"repo/.git/refs/heads/main": []byte("abc123def456\n"),
+				filepath.Join("repo", ".git", "HEAD"):                  []byte("ref: refs/heads/main\n"),
+				filepath.Join("repo", ".git", "refs", "heads", "main"): []byte("abc123def456\n"),
 			},
 			repoDir:        "repo",
 			expectedBranch: "main",
@@ -42,8 +43,8 @@ func TestGetBranchInfo(t *testing.T) {
 		},
 		"master branch": {
 			files: map[string][]byte{
-				"repo/.git/HEAD":              []byte("ref: refs/heads/master\n"),
-				"repo/.git/refs/heads/master": []byte("def456abc123\n"),
+				filepath.Join("repo", ".git", "HEAD"):                    []byte("ref: refs/heads/master\n"),
+				filepath.Join("repo", ".git", "refs", "heads", "master"): []byte("def456abc123\n"),
 			},
 			repoDir:        "repo",
 			expectedBranch: "master",
@@ -52,8 +53,8 @@ func TestGetBranchInfo(t *testing.T) {
 		},
 		"feature branch": {
 			files: map[string][]byte{
-				"repo/.git/HEAD":                   []byte("ref: refs/heads/feature-xyz\n"),
-				"repo/.git/refs/heads/feature-xyz": []byte("789xyz456\n"),
+				filepath.Join("repo", ".git", "HEAD"):                         []byte("ref: refs/heads/feature-xyz\n"),
+				filepath.Join("repo", ".git", "refs", "heads", "feature-xyz"): []byte("789xyz456\n"),
 			},
 			repoDir:        "repo",
 			expectedBranch: "feature-xyz",
@@ -62,7 +63,7 @@ func TestGetBranchInfo(t *testing.T) {
 		},
 		"detached HEAD": {
 			files: map[string][]byte{
-				"repo/.git/HEAD": []byte("9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631\n"),
+				filepath.Join("repo", ".git", "HEAD"): []byte("9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631\n"),
 			},
 			repoDir:     "repo",
 			expectError: true,
@@ -74,7 +75,7 @@ func TestGetBranchInfo(t *testing.T) {
 		},
 		"missing branch ref file": {
 			files: map[string][]byte{
-				"repo/.git/HEAD": []byte("ref: refs/heads/main\n"),
+				filepath.Join("repo", ".git", "HEAD"): []byte("ref: refs/heads/main\n"),
 				// Missing refs/heads/main file
 			},
 			repoDir:     "repo",
@@ -91,7 +92,7 @@ func TestGetBranchInfo(t *testing.T) {
 
 			if tc.expectError {
 				if err == nil {
-					t.Fatalf("GetBranchInfo(%q) expected error but got none", tc.repoDir)
+					t.Fatalf("GetBranchInfo(%q, testFS) expected error but got none", tc.repoDir)
 				}
 				return
 			}
@@ -101,11 +102,11 @@ func TestGetBranchInfo(t *testing.T) {
 			}
 
 			if info.Branch != tc.expectedBranch {
-				t.Errorf("GetBranchInfo(%q).Branch = %q; want %q", tc.repoDir, info.Branch, tc.expectedBranch)
+				t.Errorf("GetBranchInfo(%q, testFS).Branch = %q; want %q", tc.repoDir, info.Branch, tc.expectedBranch)
 			}
 
 			if info.Hash.String() != tc.expectedHash {
-				t.Errorf("GetBranchInfo(%q).Hash = %q; want %q", tc.repoDir, info.Hash.String(), tc.expectedHash)
+				t.Errorf("GetBranchInfo(%q, testFS).Hash = %q; want %q", tc.repoDir, info.Hash.String(), tc.expectedHash)
 			}
 		})
 	}
@@ -123,7 +124,7 @@ func TestBranchName(t *testing.T) {
 	}{
 		"main branch": {
 			files: map[string][]byte{
-				"repo/.git/HEAD": []byte("ref: refs/heads/main\n"),
+				filepath.Join("repo", ".git", "HEAD"): []byte("ref: refs/heads/main\n"),
 			},
 			repoDir:        "repo",
 			expectedBranch: "main",
@@ -131,7 +132,7 @@ func TestBranchName(t *testing.T) {
 		},
 		"master branch": {
 			files: map[string][]byte{
-				"repo/.git/HEAD": []byte("ref: refs/heads/master\n"),
+				filepath.Join("repo", ".git", "HEAD"): []byte("ref: refs/heads/master\n"),
 			},
 			repoDir:        "repo",
 			expectedBranch: "master",
@@ -139,7 +140,7 @@ func TestBranchName(t *testing.T) {
 		},
 		"feature branch": {
 			files: map[string][]byte{
-				"repo/.git/HEAD": []byte("ref: refs/heads/feature-xyz\n"),
+				filepath.Join("repo", ".git", "HEAD"): []byte("ref: refs/heads/feature-xyz\n"),
 			},
 			repoDir:        "repo",
 			expectedBranch: "feature-xyz",
@@ -147,7 +148,7 @@ func TestBranchName(t *testing.T) {
 		},
 		"detached HEAD": {
 			files: map[string][]byte{
-				"repo/.git/HEAD": []byte("9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631\n"),
+				filepath.Join("repo", ".git", "HEAD"): []byte("9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631\n"),
 			},
 			repoDir:        "repo",
 			expectError:    true,
@@ -178,11 +179,11 @@ func TestBranchName(t *testing.T) {
 			}
 
 			if err != nil {
-				t.Fatalf("BranchName(%q) failed: %v", tc.repoDir, err)
+				t.Fatalf("BranchName(%q, testFs) failed: %v", tc.repoDir, err)
 			}
 
 			if branch != tc.expectedBranch {
-				t.Errorf("BranchName(%q) = %q; want %q", tc.repoDir, branch, tc.expectedBranch)
+				t.Errorf("BranchName(%q, testFs) = %q; want %q", tc.repoDir, branch, tc.expectedBranch)
 			}
 		})
 	}
@@ -199,8 +200,8 @@ func TestHeadDigest(t *testing.T) {
 	}{
 		"main branch": {
 			files: map[string][]byte{
-				"repo/.git/HEAD":            []byte("ref: refs/heads/main\n"),
-				"repo/.git/refs/heads/main": []byte("abc123def456\n"),
+				filepath.Join("repo", ".git", "HEAD"):                  []byte("ref: refs/heads/main\n"),
+				filepath.Join("repo", ".git", "refs", "heads", "main"): []byte("abc123def456\n"),
 			},
 			repoDir:      "repo",
 			expectedHash: "abc123def456",
@@ -208,8 +209,8 @@ func TestHeadDigest(t *testing.T) {
 		},
 		"master branch": {
 			files: map[string][]byte{
-				"repo/.git/HEAD":              []byte("ref: refs/heads/master\n"),
-				"repo/.git/refs/heads/master": []byte("def456abc123\n"),
+				filepath.Join("repo", ".git", "HEAD"):                    []byte("ref: refs/heads/master\n"),
+				filepath.Join("repo", ".git", "refs", "heads", "master"): []byte("def456abc123\n"),
 			},
 			repoDir:      "repo",
 			expectedHash: "def456abc123",
@@ -217,7 +218,7 @@ func TestHeadDigest(t *testing.T) {
 		},
 		"detached HEAD": {
 			files: map[string][]byte{
-				"repo/.git/HEAD": []byte("9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631\n"),
+				filepath.Join("repo", ".git", "HEAD"): []byte("9fe4d9792bb5aac4d5ec60ff8a37e8160f3de631\n"),
 			},
 			repoDir:     "repo",
 			expectError: true,
@@ -238,13 +239,13 @@ func TestHeadDigest(t *testing.T) {
 
 			if tc.expectError {
 				if err == nil {
-					t.Fatalf("HeadDigest(%q) expected error but got none", tc.repoDir)
+					t.Fatalf("HeadDigest(%q, testFS) expected error but got none", tc.repoDir)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("HeadDigest(%q) failed: %v", tc.repoDir, err)
+				t.Fatalf("HeadDigest(%q, testFS) failed: %v", tc.repoDir, err)
 			}
 
 			if digest.String() != tc.expectedHash {
