@@ -28,10 +28,10 @@ testr:
 	go test -race -shuffle on github.com/telemachus/pluggo/internal/git
 
 build: lint testr
-	go build ./cmd/pluggo
+	go build .
 
 install: build
-	go install ./cmd/pluggo
+	go install .
 
 clean:
 	rm -f pluggo

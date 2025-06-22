@@ -26,7 +26,7 @@ change if I switch from `exec` calls to a pure-Go library for Git operations.)
 To install, run the following command.
 
 ```shell
-go install https://pkg.go.dev/github.com/telemachus/pluggo/cmd/pluggo@latest
+go install github.com/telemachus/pluggo@latest
 ```
 
 You can also [download the source code][pluggo] and install it locally by
