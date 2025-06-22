@@ -1,6 +1,8 @@
 name: pluggo test
 on:
   push:
+    branches:
+      - '**'
   pull_request:
 
 jobs:
