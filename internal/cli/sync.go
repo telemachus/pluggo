@@ -17,6 +17,33 @@ type PluginSpec struct {
 	Pin    bool
 }
 
+type syncResults struct {
+	installed   []string
+	reinstalled []pluginReinstall
+	updated     []pluginUpdate
+	moved       []pluginMove
+	pinned      []string
+	upToDate    []string
+	removed     []string
+	errors      []string
+}
+
+type pluginReinstall struct {
+	name   string
+	reason string
+}
+
+type pluginUpdate struct {
+	name    string
+	oldHash string
+	newHash string
+}
+
+type pluginMove struct {
+	name  string
+	toOpt bool
+}
+
 func (cmd *cmdEnv) sync(pSpecs []PluginSpec) {
 	if cmd.noOp() || !cmd.ensurePluginDirs() {
 		return
@@ -63,12 +90,7 @@ func (cmd *cmdEnv) reconcileLocal(statesByName map[string]*PluginState, pSpecs [
 
 	for range pSpecs {
 		res := <-ch
-
-		if !cmd.quietWanted {
-			res.publish()
-		} else if res.isErr {
-			res.publishError()
-		}
+		cmd.collectResult(res)
 	}
 }
 
@@ -89,26 +111,21 @@ func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 		if err := os.RemoveAll(pluginPath); err != nil {
 			action := fmt.Sprintf("skipping %q", pluginName)
 			cmd.reportWarning(action, "failed to remove plugin", err)
-
 			continue
 		}
 
-		if !cmd.quietWanted {
-			fmt.Printf("%s: removed (not in configuration)\n", pluginName)
-		}
+		cmd.collectResult(result{plugin: pluginName, kind: resultRemoved})
 	}
 }
 
 func (cmd *cmdEnv) reconcile(pState *PluginState, pSpec PluginSpec, ch chan<- result) {
 	if pState == nil {
 		cmd.manageInstall(pSpec, ch)
-
 		return
 	}
 
 	if changed, reason := cmd.hasConfigChanged(pState, pSpec); changed {
 		cmd.manageReinstall(pState, pSpec, reason, ch)
-
 		return
 	}
 
@@ -120,18 +137,11 @@ func (cmd *cmdEnv) manageInstall(pSpec PluginSpec, ch chan<- result) {
 
 	if err := cmd.install(pSpec, pluginDir); err != nil {
 		cmd.incrementWarn()
-		ch <- result{
-			isErr: true,
-			msg:   fmt.Sprintf("failed to install %s: %s", pSpec.Name, err),
-		}
-
+		ch <- result{plugin: pSpec.Name, kind: resultError}
 		return
 	}
 
-	ch <- result{
-		isErr: false,
-		msg:   fmt.Sprintf("%s: installed", pSpec.Name),
-	}
+	ch <- result{plugin: pSpec.Name, kind: resultInstalled}
 }
 
 func (cmd *cmdEnv) hasConfigChanged(pState *PluginState, pSpec PluginSpec) (changed bool, reason string) {
@@ -148,17 +158,14 @@ func (cmd *cmdEnv) hasConfigChanged(pState *PluginState, pSpec PluginSpec) (chan
 func (cmd *cmdEnv) manageReinstall(pState *PluginState, pSpec PluginSpec, reason string, ch chan<- result) {
 	if err := cmd.reinstall(pState.Directory, pSpec); err != nil {
 		cmd.incrementWarn()
-		ch <- result{
-			isErr: true,
-			msg:   fmt.Sprintf("failed to reinstall %s: %s", pSpec.Name, err),
-		}
-
+		ch <- result{plugin: pSpec.Name, kind: resultError}
 		return
 	}
 
 	ch <- result{
-		isErr: false,
-		msg:   fmt.Sprintf("%s: reinstalled (%s)", pSpec.Name, reason),
+		plugin: pSpec.Name,
+		kind:   resultReinstalled,
+		detail: resultDetail{reason: reason},
 	}
 }
 
@@ -166,31 +173,59 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 	upRes := cmd.update(pState, pSpec)
 	if upRes.err != nil {
 		cmd.incrementWarn()
-		ch <- result{
-			isErr: true,
-			msg:   fmt.Sprintf("failed to update %s: %s", pSpec.Name, upRes.err),
-		}
-
+		ch <- result{plugin: pSpec.Name, kind: resultError}
 		return
 	}
 
-	hashAfter, err := git.HeadDigest(pState.Directory)
+	newHash, err := git.HeadDigest(pState.Directory)
 	if err != nil {
 		cmd.incrementWarn()
-		ch <- result{
-			isErr: true,
-			msg:   fmt.Sprintf("failed to get updated hash for %s: %s", pSpec.Name, err),
-		}
-
+		ch <- result{plugin: pSpec.Name, kind: resultError}
 		return
 	}
 
-	upRes.hashBefore = pState.Hash
-	upRes.hashAfter = hashAfter
+	upRes.oldHash = pState.Hash
+	upRes.newHash = newHash
 
-	ch <- result{
-		isErr: false,
-		msg:   formatUpdateMsg(pSpec.Name, upRes),
+	ch <- cmd.determineUpdateResult(pSpec.Name, upRes)
+}
+
+func (cmd *cmdEnv) determineUpdateResult(pluginName string, upRes updateResult) result {
+	switch {
+	case upRes.moved && upRes.pinned:
+		return result{
+			plugin: pluginName,
+			kind:   resultMoved,
+			detail: resultDetail{movedToOpt: upRes.toOpt},
+		}
+	case upRes.moved && !upRes.oldHash.Equals(upRes.newHash):
+		return result{
+			plugin: pluginName,
+			kind:   resultUpdated,
+			detail: resultDetail{
+				oldHash: upRes.oldHash.String()[:hashDisplayLen],
+				newHash: upRes.newHash.String()[:hashDisplayLen],
+			},
+		}
+	case upRes.moved:
+		return result{
+			plugin: pluginName,
+			kind:   resultMoved,
+			detail: resultDetail{movedToOpt: upRes.toOpt},
+		}
+	case upRes.pinned:
+		return result{plugin: pluginName, kind: resultPinned}
+	case !upRes.oldHash.Equals(upRes.newHash):
+		return result{
+			plugin: pluginName,
+			kind:   resultUpdated,
+			detail: resultDetail{
+				oldHash: upRes.oldHash.String()[:hashDisplayLen],
+				newHash: upRes.newHash.String()[:hashDisplayLen],
+			},
+		}
+	default:
+		return result{plugin: pluginName, kind: resultUpToDate}
 	}
 }
 

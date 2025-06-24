@@ -4,19 +4,18 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/telemachus/pluggo/internal/git"
 )
 
 // updateResult represents the update of a single plugin.
 type updateResult struct {
-	err        error
-	hashBefore git.Digest
-	hashAfter  git.Digest
-	moved      bool
-	pinned     bool
-	toOpt      bool
+	err     error
+	oldHash git.Digest
+	newHash git.Digest
+	moved   bool
+	pinned  bool
+	toOpt   bool
 }
 
 func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
@@ -79,41 +78,4 @@ func (cmd *cmdEnv) ensureSubDir(pState *PluginState, pSpec PluginSpec) (updateRe
 	pState.Directory = pSpecPath
 
 	return upRes, nil
-}
-
-func formatUpdateMsg(pluginName string, upRes updateResult) string {
-	var msg strings.Builder
-	msg.Grow(len(pluginName) + 50)
-
-	msg.WriteString(pluginName)
-	msg.WriteString(":")
-
-	switch {
-	case upRes.moved && upRes.toOpt:
-		msg.WriteString(" moved from start/ to opt/")
-	case upRes.moved:
-		msg.WriteString(" moved from opt/ to start/")
-	}
-
-	if upRes.pinned {
-		if upRes.moved {
-			msg.WriteString(" and pinned (no update attempted)")
-		} else {
-			msg.WriteString(" pinned (no update attempted)")
-		}
-		return msg.String()
-	}
-
-	if !upRes.hashBefore.Equals(upRes.hashAfter) {
-		if upRes.moved {
-			msg.WriteString(" and updated")
-		} else {
-			msg.WriteString(" updated")
-		}
-		msg.WriteString(fmt.Sprintf(" from %.7s to %.7s", upRes.hashBefore, upRes.hashAfter))
-	} else if !upRes.moved && !upRes.pinned {
-		msg.WriteString(" already up to date")
-	}
-
-	return msg.String()
 }

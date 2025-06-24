@@ -15,6 +15,7 @@ import (
 )
 
 type cmdEnv struct {
+	results       *syncResults
 	name          string
 	version       string
 	confFile      string
@@ -22,15 +23,19 @@ type cmdEnv struct {
 	dataDir       string
 	errCount      int
 	warnCount     int
+	mu            sync.Mutex
 	debugWanted   bool
 	helpWanted    bool
 	quietWanted   bool
 	versionWanted bool
-	mu            sync.Mutex
 }
 
 func cmdFrom(name, version string, args []string) *cmdEnv {
-	cmd := &cmdEnv{name: name, version: version}
+	cmd := &cmdEnv{
+		name:    name,
+		version: version,
+		results: &syncResults{},
+	}
 
 	og := opts.NewGroup(cmd.name)
 	og.String(&cmd.confFile, "config", "")
@@ -186,6 +191,37 @@ func (cmd *cmdEnv) resolveExitValue() int {
 	}
 
 	return exitSuccess
+}
+
+func (cmd *cmdEnv) collectResult(res result) {
+	switch res.kind {
+	case resultInstalled:
+		cmd.results.installed = append(cmd.results.installed, res.plugin)
+	case resultReinstalled:
+		cmd.results.reinstalled = append(cmd.results.reinstalled, pluginReinstall{
+			name:   res.plugin,
+			reason: res.detail.reason,
+		})
+	case resultUpdated:
+		cmd.results.updated = append(cmd.results.updated, pluginUpdate{
+			name:    res.plugin,
+			oldHash: res.detail.oldHash,
+			newHash: res.detail.newHash,
+		})
+	case resultMoved:
+		cmd.results.moved = append(cmd.results.moved, pluginMove{
+			name:  res.plugin,
+			toOpt: res.detail.movedToOpt,
+		})
+	case resultPinned:
+		cmd.results.pinned = append(cmd.results.pinned, res.plugin)
+	case resultUpToDate:
+		cmd.results.upToDate = append(cmd.results.upToDate, res.plugin)
+	case resultRemoved:
+		cmd.results.removed = append(cmd.results.removed, res.plugin)
+	case resultError:
+		cmd.results.errors = append(cmd.results.errors, res.plugin)
+	}
 }
 
 var cmdUsage = `usage: pluggo [options]

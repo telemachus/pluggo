@@ -1,27 +1,27 @@
 package cli
 
-import (
-	"fmt"
-	"os"
+type result struct {
+	plugin string
+	detail resultDetail
+	kind   resultKind
+}
+
+type resultKind int
+
+const (
+	resultInstalled resultKind = iota
+	resultReinstalled
+	resultUpdated
+	resultMoved
+	resultPinned
+	resultUpToDate
+	resultRemoved
+	resultError
 )
 
-type result struct {
-	msg   string
-	isErr bool
-}
-
-func (r result) publish() {
-	if r.isErr {
-		fmt.Fprintln(os.Stderr, r.msg)
-
-		return
-	}
-
-	fmt.Fprintln(os.Stdout, r.msg)
-}
-
-func (r result) publishError() {
-	if r.isErr {
-		fmt.Fprintln(os.Stderr, r.msg)
-	}
+type resultDetail struct {
+	reason     string
+	oldHash    string
+	newHash    string
+	movedToOpt bool
 }
