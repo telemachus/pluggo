@@ -125,6 +125,11 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 		cfg.DataDir[0] = cmd.homeDir
 	}
 	cmd.dataDir = filepath.Join(cfg.DataDir...)
+	if cmd.dataDir == "" {
+		cmd.reportError("dataDir is required in configuration", nil)
+
+		return nil
+	}
 
 	// Every plugin must specify a URL, a name, and a branch.
 	return slices.DeleteFunc(cfg.Plugins, func(pSpec PluginSpec) bool {

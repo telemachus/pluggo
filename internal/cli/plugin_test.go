@@ -18,6 +18,7 @@ func fakeCmdEnv(confFile string) *cmdEnv {
 	return &cmdEnv{
 		name:     "test",
 		confFile: confFile,
+		homeDir:  "/tmp/test-home",
 	}
 }
 
@@ -56,5 +57,14 @@ func TestPluginChecks(t *testing.T) {
 
 	if len(plugins) != 1 {
 		t.Errorf("cmd.plugins(%q) expected len(plugins) = 1; actual: %d", confFile, len(plugins))
+	}
+}
+
+func TestMissingDataDirError(t *testing.T) {
+	cmd := fakeCmdEnv("testdata/no-datadir.json")
+	cmd.plugins()
+
+	if cmd.errCount == 0 {
+		t.Error("cmd.errCount == 0; expected error for missing dataDir")
 	}
 }

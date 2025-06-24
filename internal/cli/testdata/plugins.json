@@ -1,4 +1,7 @@
 {
+    "dataDir": [
+        "/home/user"
+    ],
     "plugins": [
         {
             "branch": "foo",
