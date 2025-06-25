@@ -20,6 +20,8 @@ type cmdEnv struct {
 	confFile      string
 	homeDir       string
 	dataDir       string
+	startDir      string
+	optDir        string
 	results       syncResults
 	errCount      int
 	warnCount     int
@@ -129,11 +131,21 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 		return nil
 	}
+	cmd.startDir = filepath.Join(cmd.dataDir, "start")
+	cmd.optDir = filepath.Join(cmd.dataDir, "opt")
 
 	// Every plugin must specify a URL, a name, and a branch.
 	return slices.DeleteFunc(cfg.Plugins, func(pSpec PluginSpec) bool {
 		return pSpec.URL == "" || pSpec.Name == "" || pSpec.Branch == ""
 	})
+}
+
+func (cmd *cmdEnv) pluginPath(pSpec PluginSpec) string {
+	if pSpec.Opt {
+		return filepath.Join(cmd.optDir, pSpec.Name)
+	}
+
+	return filepath.Join(cmd.startDir, pSpec.Name)
 }
 
 func (cmd *cmdEnv) reportWarning(action, reason string, err error) {

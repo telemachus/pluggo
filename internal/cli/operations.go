@@ -6,7 +6,8 @@ import (
 	"os/exec"
 )
 
-func (cmd *cmdEnv) install(pSpec PluginSpec, dir string) error {
+func (cmd *cmdEnv) install(pSpec PluginSpec) error {
+	dir := cmd.pluginPath(pSpec)
 	//nolint:gosec // pSpec.Branch and pSpec.URL come from user's own config file
 	gitCmd := exec.Command("git", "clone", "--filter=blob:none", "-b", pSpec.Branch, pSpec.URL, dir)
 	if err := gitCmd.Run(); err != nil {
@@ -21,7 +22,7 @@ func (cmd *cmdEnv) reinstall(dir string, pSpec PluginSpec) error {
 		return fmt.Errorf("failed to remove existing directory: %w", err)
 	}
 
-	return cmd.install(pSpec, pSpec.fullPath(cmd.dataDir))
+	return cmd.install(pSpec)
 }
 
 func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) result {
@@ -53,7 +54,7 @@ func (cmd *cmdEnv) ensureSubDir(pState *PluginState, pSpec PluginSpec) (result, 
 		res.opResult.set(opPinned)
 	}
 
-	pSpecPath := pSpec.fullPath(cmd.dataDir)
+	pSpecPath := cmd.pluginPath(pSpec)
 
 	// Return early if the directory is already in the right place.
 	if pSpecPath == pState.Directory {

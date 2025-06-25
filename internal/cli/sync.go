@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"strconv"
 
 	"github.com/telemachus/pluggo/internal/git"
 )
@@ -30,14 +30,13 @@ func (cmd *cmdEnv) sync(pSpecs []PluginSpec, reporter *consoleReporter) {
 	unwanted := findUnwanted(statesByName, specsByName)
 	cmd.results = make(syncResults, 0, len(pSpecs)+len(unwanted))
 
-	reporter.start(fmt.Sprintf("%s: processing %d plugins...", cmd.name, cap(cmd.results)))
+	reporter.start(cmd.name + ": processing " + strconv.Itoa(cap(cmd.results)) + " plugins...")
 	cmd.removeAll(unwanted)
 	cmd.reconcileLocal(statesByName, pSpecs)
 }
 
 func (cmd *cmdEnv) ensurePluginDirs() bool {
-	for _, subDir := range []string{"start", "opt"} {
-		wantedDir := filepath.Join(cmd.dataDir, subDir)
+	for _, wantedDir := range []string{cmd.startDir, cmd.optDir} {
 		if err := os.MkdirAll(wantedDir, os.ModePerm); err != nil {
 			reason := fmt.Sprintf("cannot create directory %q", wantedDir)
 			cmd.reportError(reason, err)
@@ -59,7 +58,7 @@ func makeSpecMap(pSpecs []PluginSpec) map[string]PluginSpec {
 }
 
 func (cmd *cmdEnv) reconcileLocal(statesByName map[string]*PluginState, pSpecs []PluginSpec) {
-	ch := make(chan result)
+	ch := make(chan result, len(pSpecs))
 	for _, spec := range pSpecs {
 		// cmd.reconcile is safe even when statesByName[spec.Name] is nil.
 		go cmd.reconcile(statesByName[spec.Name], spec, ch)
@@ -112,10 +111,9 @@ func (cmd *cmdEnv) reconcile(pState *PluginState, pSpec PluginSpec, ch chan<- re
 }
 
 func (cmd *cmdEnv) manageInstall(pSpec PluginSpec, ch chan<- result) {
-	pluginDir := pSpec.fullPath(cmd.dataDir)
 	res := result{plugin: pSpec.Name}
 
-	if err := cmd.install(pSpec, pluginDir); err != nil {
+	if err := cmd.install(pSpec); err != nil {
 		cmd.incrementWarn()
 		res.opResult.set(opError)
 		ch <- res
@@ -181,13 +179,4 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 	}
 
 	ch <- res
-}
-
-func (pSpec *PluginSpec) fullPath(dataDir string) string {
-	switch pSpec.Opt {
-	case true:
-		return filepath.Join(dataDir, "opt", pSpec.Name)
-	default:
-		return filepath.Join(dataDir, "start", pSpec.Name)
-	}
 }

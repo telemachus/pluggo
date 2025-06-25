@@ -1,10 +1,10 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 
 	"github.com/telemachus/pluggo/internal/git"
 )
@@ -24,8 +24,8 @@ func (cmd *cmdEnv) makeStateMap() map[string]*PluginState {
 	// a reasonable initial allocation.
 	statesByName := make(map[string]*PluginState, 20)
 
-	for _, dir := range []string{"start", "opt"} {
-		states := cmd.scanPackDir(dir)
+	for _, baseDir := range []string{cmd.startDir, cmd.optDir} {
+		states := cmd.scanPackDir(baseDir)
 		for pluginName, state := range states {
 			statesByName[pluginName] = state
 		}
@@ -34,15 +34,14 @@ func (cmd *cmdEnv) makeStateMap() map[string]*PluginState {
 	return statesByName
 }
 
-func (cmd *cmdEnv) scanPackDir(dir string) map[string]*PluginState {
-	baseDir := filepath.Join(cmd.dataDir, dir)
+func (cmd *cmdEnv) scanPackDir(baseDir string) map[string]*PluginState {
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 		return nil
 	}
 
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		action := fmt.Sprintf("skipping %q", baseDir)
+		action := "skipping " + strconv.Quote(baseDir)
 		cmd.reportWarning(action, "cannot read directory", err)
 		return nil
 	}
@@ -74,7 +73,7 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 
 	info, err := git.GetBranchInfo(pluginDir)
 	if err != nil {
-		action := fmt.Sprintf("skipping %q", pluginName)
+		action := "skipping " + strconv.Quote(pluginName)
 		cmd.reportWarning(action, "cannot determine repo state", err)
 		return nil
 	}
@@ -91,7 +90,7 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 func (cmd *cmdEnv) getPluginURL(pluginDir, pluginName string) (string, error) {
 	url, err := git.URL(pluginDir)
 	if err != nil {
-		action := fmt.Sprintf("skipping %q", pluginName)
+		action := "skipping " + strconv.Quote(pluginName)
 		cmd.reportWarning(action, "cannot determine repo URL", err)
 		return "", err
 	}
