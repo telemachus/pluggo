@@ -25,7 +25,7 @@ func (r *consoleReporter) start(banner string) {
 	}
 }
 
-func (r *consoleReporter) finish(results *syncResults) {
+func (r *consoleReporter) finish(results syncResults) {
 	if r.spinner != nil {
 		r.spinner.stop()
 	}
@@ -36,78 +36,68 @@ func (r *consoleReporter) finish(results *syncResults) {
 		return
 	}
 
-	r.printFullSummary(results)
+	r.printFull(results)
 }
 
-func (r *consoleReporter) printFullSummary(results *syncResults) {
-	r.printSuccessResults(results)
-	r.printErrorResults(results)
-}
-
-func (r *consoleReporter) printSuccessResults(results *syncResults) {
-	r.printInstalled(results.installed)
-	r.printReinstalled(results.reinstalled)
-	r.printUpdated(results.updated)
-	r.printMoved(results.moved)
-	r.printPinned(results.pinned)
-	r.printUpToDate(results.upToDate)
-	r.printRemoved(results.removed)
-}
-
-func (r *consoleReporter) printInstalled(installed []string) {
-	for _, plugin := range installed {
-		fmt.Printf("%s%s: installed\n", r.indent, plugin)
+func (r *consoleReporter) printFull(results syncResults) {
+	for _, res := range results {
+		fmt.Println(r.formatResultMessage(res))
 	}
 }
 
-func (r *consoleReporter) printReinstalled(reinstalled []pluginReinstall) {
-	for _, reinstall := range reinstalled {
-		fmt.Printf("%s%s: reinstalled (%s)\n", r.indent, reinstall.name, reinstall.reason)
-	}
-}
+//nolint:cyclop //This is a straightfoward switch.
+func (r *consoleReporter) formatResultMessage(res result) string {
+	var msg strings.Builder
+	msg.WriteString(r.indent)
+	msg.WriteString(res.plugin)
+	msg.WriteString(": ")
 
-func (r *consoleReporter) printUpdated(updated []pluginUpdate) {
-	for _, update := range updated {
-		fmt.Printf("%s%s: updated from %.*s to %.*s\n", r.indent, update.name, hashDisplayLen, update.oldHash, hashDisplayLen, update.newHash)
-	}
-}
+	direction := " from start/ to opt/"
+	const optToStart = " from opt/ to start/"
 
-func (r *consoleReporter) printMoved(moved []pluginMove) {
-	for _, move := range moved {
-		direction := "start/ to opt/"
-		if !move.toOpt {
-			direction = "opt/ to start/"
+	switch {
+	case res.opResult.has(opError):
+		msg.WriteString("failed")
+	case res.opResult.has(opInstalled):
+		msg.WriteString("installed")
+	case res.opResult.has(opRemoved):
+		msg.WriteString("removed")
+	case res.opResult.has(opReinstalled):
+		msg.WriteString("reinstalled")
+	case res.opResult.has(opUpdated) && res.opResult.has(opMoved):
+		msg.WriteString("updated and moved")
+		if !res.toOpt {
+			direction = optToStart
 		}
-		fmt.Printf("%s%s: moved from %s\n", r.indent, move.name, direction)
+		msg.WriteString(direction)
+	case res.opResult.has(opUpdated):
+		msg.WriteString("updated")
+	case res.opResult.has(opPinned) && res.opResult.has(opMoved):
+		msg.WriteString("moved")
+		if !res.toOpt {
+			direction = optToStart
+		}
+		msg.WriteString(direction)
+		msg.WriteString(" and pinned (no update attempted)")
+	case res.opResult.has(opPinned):
+		msg.WriteString("pinned (no update attempted)")
+	case res.opResult.has(opMoved):
+		msg.WriteString("moved")
+		if !res.toOpt {
+			direction = optToStart
+		}
+		msg.WriteString(direction)
+	default: // opUpToDate
+		msg.WriteString("already up-to-date")
 	}
+
+	return msg.String()
 }
 
-func (r *consoleReporter) printPinned(pinned []string) {
-	for _, plugin := range pinned {
-		fmt.Printf("%s%s: pinned (no update attempted)\n", r.indent, plugin)
-	}
-}
-
-func (r *consoleReporter) printUpToDate(upToDate []string) {
-	for _, plugin := range upToDate {
-		fmt.Printf("%s%s: already up to date\n", r.indent, plugin)
-	}
-}
-
-func (r *consoleReporter) printRemoved(removed []string) {
-	for _, plugin := range removed {
-		fmt.Printf("%s%s: removed (not in configuration)\n", r.indent, plugin)
-	}
-}
-
-func (r *consoleReporter) printErrorResults(results *syncResults) {
-	if len(results.errors) > 0 {
-		fmt.Printf("%serrors: %s\n", r.indent, strings.Join(results.errors, ", "))
-	}
-}
-
-func (r *consoleReporter) printErrorsOnly(results *syncResults) {
-	for _, plugin := range results.errors {
-		fmt.Printf("%sfailed: %s\n", r.indent, plugin)
+func (r *consoleReporter) printErrorsOnly(results syncResults) {
+	for _, res := range results {
+		if res.opResult.has(opError) {
+			fmt.Printf("%sfailed: %s\n", r.indent, res.plugin)
+		}
 	}
 }
