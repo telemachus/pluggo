@@ -1,7 +1,5 @@
 package cli
 
-import "fmt"
-
 const (
 	cmdName        = "pluggo"
 	cmdVersion     = "v0.8.0"
@@ -27,9 +25,8 @@ func (cmd *cmdEnv) process(pSpecs []PluginSpec) {
 	}
 
 	reporter := newConsoleReporter("    ", cmd.quietWanted)
-	reporter.start(fmt.Sprintf("%s: processing %d plugins...", cmd.name, len(pSpecs)))
 
-	cmd.sync(pSpecs)
+	cmd.sync(pSpecs, reporter)
 
 	reporter.finish(cmd.results)
 }
