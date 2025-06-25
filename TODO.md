@@ -4,6 +4,8 @@
 
 + Use `io/fs` rather than my thinner interface of `ReadFile`?
 
-## UI
+## `internal/cli/sync`
 
-+ Spinner? If yes, use ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏?
++ The `manageUpdate` method handles both moves and updates. I think that this
+  may lead to some repetition (especially surrounding `pSpec.Pinned`). I should
+  separate `move` from `update`.
