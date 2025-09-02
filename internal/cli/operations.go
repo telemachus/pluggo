@@ -9,8 +9,10 @@ import (
 func (cmd *cmdEnv) install(pSpec PluginSpec) error {
 	dir := cmd.pluginPath(pSpec)
 	//nolint:gosec // pSpec.Branch and pSpec.URL come from user's own config file
-	gitCmd := exec.Command("git", "clone", "--filter=blob:none", "-b", pSpec.Branch, pSpec.URL, dir)
-	if err := gitCmd.Run(); err != nil {
+	cloneCmd := exec.Command("git", "clone", "--filter=blob:none", "-b", pSpec.Branch, pSpec.URL, dir)
+	// Do not interrupt spinner to ask for username or password.
+	cloneCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if err := cloneCmd.Run(); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
@@ -40,6 +42,8 @@ func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) result {
 
 	//nolint:gosec // pState.Directory comes from user's own config file
 	updateCmd := exec.Command("git", "-C", pState.Directory, "pull", "--recurse-submodules")
+	// Do not interrupt spinner to ask for username or password.
+	updateCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if err := updateCmd.Run(); err != nil {
 		res.opResult.set(opError)
 	}

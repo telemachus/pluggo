@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 )
 
@@ -10,6 +12,9 @@ type consoleReporter struct {
 	indent      string
 	quietWanted bool
 }
+
+const errorHelp = `pluggo: one or more operations failed.
+pluggo: check directory permissions, internet connection, and git authorization.`
 
 func newConsoleReporter(indent string, quietWanted bool) *consoleReporter {
 	return &consoleReporter{
@@ -30,18 +35,44 @@ func (r *consoleReporter) finish(results syncResults) {
 		r.spinner.stop()
 	}
 
+	hasError := slices.ContainsFunc(results, func(res result) bool {
+		return res.opResult.has(opError)
+	})
+
 	if r.quietWanted {
-		r.printErrorsOnly(results)
+		r.printErrorsOnly(results, hasError)
 
 		return
 	}
 
-	r.printFull(results)
+	r.printFull(results, hasError)
 }
 
-func (r *consoleReporter) printFull(results syncResults) {
+func (r *consoleReporter) printErrorsOnly(results syncResults, hasError bool) {
 	for _, res := range results {
+		if res.opResult.has(opError) {
+			fmt.Fprintf(os.Stderr, "%s%s: failed\n", r.indent, res.plugin)
+		}
+	}
+
+	if hasError {
+		fmt.Fprintln(os.Stderr, errorHelp)
+	}
+}
+
+func (r *consoleReporter) printFull(results syncResults, hasError bool) {
+	for _, res := range results {
+		if res.opResult.has(opError) {
+			fmt.Fprintf(os.Stderr, "%s%s: failed\n", r.indent, res.plugin)
+
+			continue
+		}
+
 		fmt.Println(r.formatResultMessage(res))
+	}
+
+	if hasError {
+		fmt.Fprintln(os.Stderr, errorHelp)
 	}
 }
 
@@ -92,12 +123,4 @@ func (r *consoleReporter) formatResultMessage(res result) string {
 	}
 
 	return msg.String()
-}
-
-func (r *consoleReporter) printErrorsOnly(results syncResults) {
-	for _, res := range results {
-		if res.opResult.has(opError) {
-			fmt.Printf("%sfailed: %s\n", r.indent, res.plugin)
-		}
-	}
 }
