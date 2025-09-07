@@ -38,8 +38,8 @@ func (cmd *cmdEnv) sync(pSpecs []PluginSpec, reporter *consoleReporter) {
 func (cmd *cmdEnv) ensurePluginDirs() bool {
 	for _, wantedDir := range []string{cmd.startDir, cmd.optDir} {
 		if err := os.MkdirAll(wantedDir, os.ModePerm); err != nil {
-			reason := fmt.Sprintf("cannot create directory %q", wantedDir)
-			cmd.reportError(reason, err)
+			reason := fmt.Sprintf("cannot create directory %q: ", wantedDir)
+			cmd.reportError(reason + err.Error())
 
 			return false
 		}

@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/telemachus/opts"
@@ -49,14 +47,8 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 
 	// Return if parsing fails or there are leftover arguments.
 	if err := og.Parse(args); err != nil {
-		cmd.reportError("argument parsing error", err)
-
-		return cmd
-	}
-	extraArgs := og.Args()
-	if err := validate(extraArgs); err != nil {
-		// In this case, the error has a message for users.
-		cmd.reportError(err.Error(), nil)
+		cmd.reportError(err.Error())
+		fmt.Fprint(os.Stderr, cmdUsage)
 
 		return cmd
 	}
@@ -76,7 +68,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	// Return if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		cmd.reportError("cannot determine HOME", err)
+		cmd.reportError("cannot determine HOME: " + err.Error())
 
 		return cmd
 	}
@@ -101,8 +93,8 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
-		reason := fmt.Sprintf("cannot read config %q", cmd.confFile)
-		cmd.reportError(reason, err)
+		reason := fmt.Sprintf("cannot read config %q: ", cmd.confFile)
+		cmd.reportError(reason + err.Error())
 
 		return nil
 	}
@@ -116,8 +108,8 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
-		reason := fmt.Sprintf("cannot parse config %q", cmd.confFile)
-		cmd.reportError(reason, err)
+		reason := fmt.Sprintf("cannot parse config %q: ", cmd.confFile)
+		cmd.reportError(reason + err.Error())
 
 		return nil
 	}
@@ -127,7 +119,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 	cmd.dataDir = filepath.Join(cfg.DataDir...)
 	if cmd.dataDir == "" {
-		cmd.reportError("dataDir is required in configuration", nil)
+		cmd.reportError("dataDir is required in configuration file")
 
 		return nil
 	}
@@ -150,15 +142,6 @@ func (cmd *cmdEnv) pluginPath(pSpec PluginSpec) string {
 
 func (cmd *cmdEnv) reportWarning(action, reason string, err error) {
 	cmd.warnCount++
-	cmd.report(action, reason, err)
-}
-
-func (cmd *cmdEnv) reportError(reason string, err error) {
-	cmd.errCount++
-	cmd.report("aborting", reason, err)
-}
-
-func (cmd *cmdEnv) report(action, reason string, err error) {
 	if cmd.debugWanted && err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s: %s: %s\n", cmd.name, action, reason, err)
 	} else {
@@ -166,39 +149,15 @@ func (cmd *cmdEnv) report(action, reason string, err error) {
 	}
 }
 
+func (cmd *cmdEnv) reportError(msg string) {
+	cmd.errCount++
+	fmt.Fprintln(os.Stderr, cmd.name+": cannot continue: "+msg)
+}
+
 func (cmd *cmdEnv) incrementWarn() {
 	cmd.mu.Lock()
 	cmd.warnCount++
 	cmd.mu.Unlock()
-}
-
-func validate(extra []string) error {
-	extraCount := len(extra)
-	var s rune
-	if extraCount > 0 {
-		if extraCount > 1 {
-			s = 's'
-		}
-
-		return fmt.Errorf("unrecognized argument%c: %s", s, quotedSlice(extra))
-	}
-
-	return nil
-}
-
-func quotedSlice(items []string) string {
-	if len(items) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString(strconv.Quote(items[0]))
-	for _, str := range items[1:] {
-		b.WriteString(" ")
-		b.WriteString(strconv.Quote(str))
-	}
-
-	return b.String()
 }
 
 func (cmd *cmdEnv) resolveExitValue() int {
