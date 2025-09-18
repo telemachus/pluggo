@@ -52,7 +52,7 @@ Pluggo needs a configuration file with the following structure:
             "branch": "master",
             "name": "nvim-snippy",
             "url": "https://github.com/dcampos/nvim-snippy",
-            "pin": true
+            "pinned": true
         },
         {
             "branch": "master",
@@ -82,8 +82,8 @@ Pluggo needs a configuration file with the following structure:
   download. There is no special treatment of GitHub repos. (In other words,
   pluggo will not automagically translate the URL `"name/plugin"` as
   `https://github.com/name/plugin`.)
-+ Each plugin object may specify a boolean value for `"pin"` and `"opt"`.
-+ If `"pin"` is true, the plugin will not be updated.
++ Each plugin object may specify a boolean value for `"pinned"` and `"opt"`.
++ If `"pinned"` is true, the plugin will not be updated.
 + If `"opt"` is true, the plugin will be installed in an `opt` subdirectory of
   `"dataDir"`. If `"opt"` is not specified or false, plugins will be installed
   in a `start` subdirectory.
@@ -91,7 +91,7 @@ Pluggo needs a configuration file with the following structure:
 Pluggo does not have subcommands. When the user runs pluggo, the tool will bring
 the state of local plugins into sync with the configuration file. Pluggo will
 remove plugins that are installed locally but are not in the configuration file.
-Any plugin that does not have `"pin": true` in its configuration will be
+Any plugin that does not have `"pinned": true` in its configuration will be
 updated. As needed, plugins will be moved between the start/ and opt/
 subdirectories depending on the configuration file and their local state.
 

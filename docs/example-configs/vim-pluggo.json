@@ -35,7 +35,7 @@
             "branch": "develop",
             "name": "vim-sandwich",
             "url": "https://github.com/machakann/vim-sandwich",
-            "pin": true
+            "pinned": true
         },
         {
             "branch": "master",
