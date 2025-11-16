@@ -64,7 +64,7 @@ func (cmd *cmdEnv) reconcileLocal(statesByName map[string]*PluginState, pSpecs [
 		go cmd.reconcile(statesByName[spec.Name], spec, ch)
 	}
 
-	for range pSpecs {
+	for range len(pSpecs) {
 		res := <-ch
 		cmd.results = append(cmd.results, res)
 	}
