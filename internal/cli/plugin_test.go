@@ -23,6 +23,8 @@ func fakeCmdEnv(confFile string) *cmdEnv {
 }
 
 func TestGetPluginsSuccess(t *testing.T) {
+	t.Parallel()
+
 	expected := makePlugins()
 	confFile := "testdata/plugins.json"
 	cmd := fakeCmdEnv(confFile)
@@ -38,6 +40,8 @@ func TestGetPluginsSuccess(t *testing.T) {
 }
 
 func TestGetPluginsFailure(t *testing.T) {
+	t.Parallel()
+
 	cmd := fakeCmdEnv("testdata/nope.json")
 	cmd.plugins()
 
@@ -47,6 +51,8 @@ func TestGetPluginsFailure(t *testing.T) {
 }
 
 func TestPluginChecks(t *testing.T) {
+	t.Parallel()
+
 	confFile := "testdata/plugin-checks.json"
 	cmd := fakeCmdEnv(confFile)
 
@@ -61,6 +67,8 @@ func TestPluginChecks(t *testing.T) {
 }
 
 func TestMissingDataDirError(t *testing.T) {
+	t.Parallel()
+
 	cmd := fakeCmdEnv("testdata/no-datadir.json")
 	cmd.plugins()
 

@@ -1,16 +1,20 @@
 package git
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // URL returns the URL of a git repository as a string.
 func URL(repo string) (string, error) {
-	cmd := exec.Command("git", "-C", repo, "ls-remote", "--get-url")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", repo, "ls-remote", "--get-url")
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -33,7 +37,7 @@ func IsRepo(candidate string) bool {
 }
 
 // IsWorkTree reports whether a directory is a git work tree.
-// Note: this is a slower but more careful check than IsGitDir.
+// Note: this is a slower but more careful check than IsRepo.
 func IsWorkTree(candidate string) bool {
 	cmd := exec.Command("git", "-C", candidate, "rev-parse", "--is-inside-work-tree")
 
