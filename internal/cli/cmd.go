@@ -49,14 +49,14 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 
 	// Return if parsing fails or there are leftover arguments.
 	if err := og.Parse(args); err != nil {
-		cmd.reportError("argument parsing error", err)
+		cmd.fatalf("argument parsing error", err)
 
 		return cmd
 	}
 	extraArgs := og.Args()
 	if err := validate(extraArgs); err != nil {
 		// In this case, the error has a message for users.
-		cmd.reportError(err.Error(), nil)
+		cmd.fatalf(err.Error(), nil)
 
 		return cmd
 	}
@@ -76,7 +76,7 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 	// Return if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		cmd.reportError("cannot determine HOME", err)
+		cmd.fatalf("cannot determine HOME", err)
 
 		return cmd
 	}
@@ -101,8 +101,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
-		reason := fmt.Sprintf("cannot read config %q", cmd.confFile)
-		cmd.reportError(reason, err)
+		cmd.fatalf(fmt.Sprintf("cannot read config %q", cmd.confFile), err)
 
 		return nil
 	}
@@ -116,8 +115,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
-		reason := fmt.Sprintf("cannot parse config %q", cmd.confFile)
-		cmd.reportError(reason, err)
+		cmd.fatalf(fmt.Sprintf("cannot parse config %q", cmd.confFile), err)
 
 		return nil
 	}
@@ -127,7 +125,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 	cmd.dataDir = filepath.Join(cfg.DataDir...)
 	if cmd.dataDir == "" {
-		cmd.reportError("dataDir is required in configuration", nil)
+		cmd.fatalf("dataDir is required in configuration", nil)
 
 		return nil
 	}
@@ -148,28 +146,41 @@ func (cmd *cmdEnv) pluginPath(pSpec PluginSpec) string {
 	return filepath.Join(cmd.startDir, pSpec.Name)
 }
 
-func (cmd *cmdEnv) reportWarning(action, reason string, err error) {
-	cmd.warnCount++
-	cmd.report(action, reason, err)
-}
-
-func (cmd *cmdEnv) reportError(reason string, err error) {
+func (cmd *cmdEnv) fatalf(userMsg string, cause error) {
+	cmd.mu.Lock()
 	cmd.errCount++
-	cmd.report("aborting", reason, err)
-}
+	cmd.mu.Unlock()
 
-func (cmd *cmdEnv) report(action, reason string, err error) {
-	if cmd.debugWanted && err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s: %s: %s\n", cmd.name, action, reason, err)
-	} else {
-		fmt.Fprintf(os.Stderr, "%s: %s: %s\n", cmd.name, action, reason)
+	fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, userMsg)
+	if cmd.debugWanted && cause != nil {
+		fmt.Fprintf(os.Stderr, "%s: cause: %v\n", cmd.name, cause)
 	}
 }
 
-func (cmd *cmdEnv) incrementWarn() {
+func (cmd *cmdEnv) warnPlugin(plugin, action string, cause error) {
 	cmd.mu.Lock()
 	cmd.warnCount++
 	cmd.mu.Unlock()
+
+	// Reporter shows "failed" - only print debug details
+	if cmd.debugWanted && cause != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s %q failed: %v\n", cmd.name, action, plugin, cause)
+	}
+}
+
+func (cmd *cmdEnv) warnf(action, reason string, cause error) {
+	cmd.mu.Lock()
+	cmd.warnCount++
+	cmd.mu.Unlock()
+
+	if cmd.quietWanted {
+		return
+	}
+	if cmd.debugWanted && cause != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s: %s: %v\n", cmd.name, action, reason, cause)
+	} else {
+		fmt.Fprintf(os.Stderr, "%s: %s: %s\n", cmd.name, action, reason)
+	}
 }
 
 func validate(extra []string) error {

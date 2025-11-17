@@ -37,9 +37,8 @@ func (cmd *cmdEnv) sync(pSpecs []PluginSpec, reporter *consoleReporter) {
 
 func (cmd *cmdEnv) ensurePluginDirs() bool {
 	for _, wantedDir := range []string{cmd.startDir, cmd.optDir} {
-		if err := os.MkdirAll(wantedDir, os.ModePerm); err != nil {
-			reason := fmt.Sprintf("cannot create directory %q", wantedDir)
-			cmd.reportError(reason, err)
+		if err := os.MkdirAll(wantedDir, 0o755); err != nil {
+			cmd.fatalf(fmt.Sprintf("cannot create directory %q", wantedDir), err)
 
 			return false
 		}
@@ -85,8 +84,7 @@ func findUnwanted(statesByName map[string]*PluginState, specsByName map[string]P
 func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 	for pluginName, pluginPath := range unwanted {
 		if err := os.RemoveAll(pluginPath); err != nil {
-			action := fmt.Sprintf("skipping %q", pluginName)
-			cmd.reportWarning(action, "failed to remove plugin", err)
+			cmd.warnf(fmt.Sprintf("skipping %q", pluginName), "failed to remove plugin", err)
 			continue
 		}
 
@@ -114,7 +112,7 @@ func (cmd *cmdEnv) manageInstall(pSpec PluginSpec, ch chan<- result) {
 	res := result{plugin: pSpec.Name}
 
 	if err := cmd.install(pSpec); err != nil {
-		cmd.incrementWarn()
+		cmd.warnPlugin(pSpec.Name, "install", err)
 		res.opResult.set(opError)
 		ch <- res
 		return
@@ -138,7 +136,7 @@ func (cmd *cmdEnv) hasConfigChanged(pState *PluginState, pSpec PluginSpec) (chan
 func (cmd *cmdEnv) manageReinstall(pState *PluginState, pSpec PluginSpec, reason string, ch chan<- result) {
 	res := result{plugin: pSpec.Name}
 	if err := cmd.reinstall(pState.Directory, pSpec); err != nil {
-		cmd.incrementWarn()
+		cmd.warnPlugin(pSpec.Name, "reinstall", err)
 		res.opResult.set(opError)
 		ch <- res
 		return
@@ -153,7 +151,7 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 	res := cmd.update(pState, pSpec)
 
 	if res.opResult.has(opError) {
-		cmd.incrementWarn()
+		cmd.warnPlugin(pSpec.Name, "update", nil)
 		ch <- res
 
 		return
@@ -167,7 +165,7 @@ func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<-
 
 	newHash, err := git.HeadDigest(pState.Directory)
 	if err != nil {
-		cmd.incrementWarn()
+		cmd.warnPlugin(pSpec.Name, "update", err)
 		res.opResult.set(opError)
 		ch <- res
 
