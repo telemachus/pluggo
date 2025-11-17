@@ -41,7 +41,7 @@ func (cmd *cmdEnv) scanPackDir(baseDir string) map[string]*PluginState {
 
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		cmd.warnf("skipping "+strconv.Quote(baseDir), "cannot read directory", err)
+		cmd.warnf("%s: skipping %s: cannot read directory: %s", cmd.name, strconv.Quote(baseDir), err)
 		return nil
 	}
 
@@ -72,7 +72,7 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 
 	info, err := git.GetBranchInfo(pluginDir)
 	if err != nil {
-		cmd.warnf("skipping "+strconv.Quote(pluginName), "cannot determine repo state", err)
+		cmd.warnf("%s: skipping %s: cannot determine repo state: %s", cmd.name, strconv.Quote(pluginName), err)
 		return nil
 	}
 
@@ -88,7 +88,7 @@ func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
 func (cmd *cmdEnv) getPluginURL(pluginDir, pluginName string) (string, error) {
 	url, err := git.URL(pluginDir)
 	if err != nil {
-		cmd.warnf("skipping "+strconv.Quote(pluginName), "cannot determine repo URL", err)
+		cmd.warnf("%s: skipping %s: cannot determine repo URL: %s", cmd.name, strconv.Quote(pluginName), err)
 		return "", err
 	}
 	return url, nil

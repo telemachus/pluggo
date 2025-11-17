@@ -9,23 +9,21 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/telemachus/opts"
 )
 
 type cmdEnv struct {
+	log           *logger
+	homeDir       string
 	name          string
 	version       string
 	confFile      string
-	homeDir       string
 	dataDir       string
 	startDir      string
 	optDir        string
 	results       syncResults
-	errCount      int
-	warnCount     int
-	mu            sync.Mutex
+	stats         stats
 	debugWanted   bool
 	helpWanted    bool
 	quietWanted   bool
@@ -37,6 +35,8 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 		name:    name,
 		version: version,
 	}
+	// Create logger early for use in setup.
+	cmd.log = newLogger(false, false)
 
 	og := opts.NewGroup(cmd.name)
 	og.String(&cmd.confFile, "config", "")
@@ -49,14 +49,13 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 
 	// Return if parsing fails or there are leftover arguments.
 	if err := og.Parse(args); err != nil {
-		cmd.fatalf("argument parsing error", err)
+		cmd.errorf("%s: argument parsing error: %s", cmd.name, err)
 
 		return cmd
 	}
 	extraArgs := og.Args()
 	if err := validate(extraArgs); err != nil {
-		// In this case, the error has a message for users.
-		cmd.fatalf(err.Error(), nil)
+		cmd.errorf("%s: %s", cmd.name, err)
 
 		return cmd
 	}
@@ -73,16 +72,19 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 		return cmd
 	}
 
+	// Update logger with actual settings.
+	cmd.log = newLogger(cmd.debugWanted, cmd.quietWanted)
+
 	// Return if we cannot get the user's home directory.
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		cmd.fatalf("cannot determine HOME", err)
+		cmd.errorf("%s: cannot determine HOME: %s", cmd.name, err)
 
 		return cmd
 	}
 	cmd.homeDir = homeDir
 
-	// Only set config file path if user does not specify their own.
+	// Set config file path only if user does not specify their own.
 	if cmd.confFile == "" {
 		cmd.confFile = filepath.Join(cmd.homeDir, confFile)
 	}
@@ -91,7 +93,8 @@ func cmdFrom(name, version string, args []string) *cmdEnv {
 }
 
 func (cmd *cmdEnv) noOp() bool {
-	return cmd.errCount > 0 || cmd.helpWanted || cmd.versionWanted
+	_, errs := cmd.stats.snapshot()
+	return errs > 0 || cmd.helpWanted || cmd.versionWanted
 }
 
 func (cmd *cmdEnv) plugins() []PluginSpec {
@@ -101,7 +104,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 
 	conf, err := os.ReadFile(cmd.confFile)
 	if err != nil {
-		cmd.fatalf(fmt.Sprintf("cannot read config %q", cmd.confFile), err)
+		cmd.errorf("%s: cannot read config %q: %s", cmd.name, cmd.confFile, err)
 
 		return nil
 	}
@@ -115,7 +118,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 
 	if err := json.Unmarshal(conf, &cfg); err != nil {
-		cmd.fatalf(fmt.Sprintf("cannot parse config %q", cmd.confFile), err)
+		cmd.errorf("%s: cannot parse config %q: %s", cmd.name, cmd.confFile, err)
 
 		return nil
 	}
@@ -125,7 +128,7 @@ func (cmd *cmdEnv) plugins() []PluginSpec {
 	}
 	cmd.dataDir = filepath.Join(cfg.DataDir...)
 	if cmd.dataDir == "" {
-		cmd.fatalf("dataDir is required in configuration", nil)
+		cmd.errorf("%s: dataDir is required in configuration", cmd.name)
 
 		return nil
 	}
@@ -146,41 +149,18 @@ func (cmd *cmdEnv) pluginPath(pSpec PluginSpec) string {
 	return filepath.Join(cmd.startDir, pSpec.Name)
 }
 
-func (cmd *cmdEnv) fatalf(userMsg string, cause error) {
-	cmd.mu.Lock()
-	cmd.errCount++
-	cmd.mu.Unlock()
-
-	fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.name, userMsg)
-	if cmd.debugWanted && cause != nil {
-		fmt.Fprintf(os.Stderr, "%s: cause: %v\n", cmd.name, cause)
-	}
+func (cmd *cmdEnv) errorf(format string, args ...any) {
+	cmd.stats.incError()
+	cmd.log.errorf(format, args...)
 }
 
-func (cmd *cmdEnv) warnPlugin(plugin, action string, cause error) {
-	cmd.mu.Lock()
-	cmd.warnCount++
-	cmd.mu.Unlock()
-
-	// Reporter shows "failed" - only print debug details
-	if cmd.debugWanted && cause != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s %q failed: %v\n", cmd.name, action, plugin, cause)
-	}
+func (cmd *cmdEnv) warnf(format string, args ...any) {
+	cmd.stats.incWarn()
+	cmd.log.warnf(format, args...)
 }
 
-func (cmd *cmdEnv) warnf(action, reason string, cause error) {
-	cmd.mu.Lock()
-	cmd.warnCount++
-	cmd.mu.Unlock()
-
-	if cmd.quietWanted {
-		return
-	}
-	if cmd.debugWanted && cause != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s: %s: %v\n", cmd.name, action, reason, cause)
-	} else {
-		fmt.Fprintf(os.Stderr, "%s: %s: %s\n", cmd.name, action, reason)
-	}
+func (cmd *cmdEnv) debugf(format string, args ...any) {
+	cmd.log.debugf(format, args...)
 }
 
 func validate(extra []string) error {
@@ -213,7 +193,8 @@ func quotedSlice(items []string) string {
 }
 
 func (cmd *cmdEnv) resolveExitValue() int {
-	if cmd.errCount+cmd.warnCount > 0 {
+	warns, errs := cmd.stats.snapshot()
+	if warns+errs > 0 {
 		return exitFailure
 	}
 

@@ -2,7 +2,7 @@ package cli
 
 const (
 	cmdName     = "pluggo"
-	cmdVersion  = "v0.8.0"
+	cmdVersion  = "v0.9.0"
 	confFile    = ".pluggo.json"
 	exitSuccess = 0
 	exitFailure = 1

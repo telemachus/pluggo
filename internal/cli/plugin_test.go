@@ -19,6 +19,7 @@ func fakeCmdEnv(confFile string) *cmdEnv {
 		name:     "test",
 		confFile: confFile,
 		homeDir:  "/tmp/test-home",
+		log:      newLogger(false, false),
 	}
 }
 
@@ -30,7 +31,8 @@ func TestGetPluginsSuccess(t *testing.T) {
 	cmd := fakeCmdEnv(confFile)
 
 	actual := cmd.plugins()
-	if cmd.errCount > 0 {
+	_, errs := cmd.stats.snapshot()
+	if errs > 0 {
 		t.Fatal("test cannot finish since cmd.plugins() failed")
 	}
 
@@ -45,8 +47,9 @@ func TestGetPluginsFailure(t *testing.T) {
 	cmd := fakeCmdEnv("testdata/nope.json")
 	cmd.plugins()
 
-	if cmd.errCount == 0 {
-		t.Error("cmd.exitVal == 0; expected error")
+	_, errs := cmd.stats.snapshot()
+	if errs == 0 {
+		t.Error("expected error")
 	}
 }
 
@@ -57,7 +60,8 @@ func TestPluginChecks(t *testing.T) {
 	cmd := fakeCmdEnv(confFile)
 
 	plugins := cmd.plugins()
-	if cmd.errCount > 0 {
+	_, errs := cmd.stats.snapshot()
+	if errs > 0 {
 		t.Fatal("test cannot finish since cmd.plugins() failed")
 	}
 
@@ -72,7 +76,8 @@ func TestMissingDataDirError(t *testing.T) {
 	cmd := fakeCmdEnv("testdata/no-datadir.json")
 	cmd.plugins()
 
-	if cmd.errCount == 0 {
-		t.Error("cmd.errCount == 0; expected error for missing dataDir")
+	_, errs := cmd.stats.snapshot()
+	if errs == 0 {
+		t.Error("expected error for missing dataDir")
 	}
 }
