@@ -1,32 +1,24 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
-
-	"github.com/telemachus/pluggo/internal/git"
 )
 
-// PluginState represents a plugin installed locally.
-type PluginState struct {
-	Name      string
-	Directory string
-	URL       string
-	Branch    string
-	Hash      git.Digest
-}
-
-func (cmd *cmdEnv) makeStateMap() map[string]*PluginState {
-	// We cannot know how many plugins the user works with, but we can
-	// assume that they work with *some* plugins. Twenty seems like
-	// a reasonable initial allocation.
-	statesByName := make(map[string]*PluginState, 20)
+// makeStateMap scans the plugin directories and returns a map of installed plugins.
+func (cmd *cmdEnv) makeStateMap(ctx context.Context) map[string]*pluginState {
+	statesByName := make(map[string]*pluginState, 20)
 
 	for _, baseDir := range []string{cmd.startDir, cmd.optDir} {
-		states := cmd.scanPackDir(baseDir)
+		states := cmd.scanPackDir(ctx, baseDir)
 		for pluginName, state := range states {
+			if _, exists := statesByName[pluginName]; exists {
+				cmd.warnf("%s: duplicate plugin %q found in both start/ and opt/ directories", cmd.name, pluginName)
+				continue
+			}
+
 			statesByName[pluginName] = state
 		}
 	}
@@ -34,65 +26,70 @@ func (cmd *cmdEnv) makeStateMap() map[string]*PluginState {
 	return statesByName
 }
 
-func (cmd *cmdEnv) scanPackDir(baseDir string) map[string]*PluginState {
+// scanPackDir scans a directory for git repositories representing plugins.
+func (cmd *cmdEnv) scanPackDir(ctx context.Context, baseDir string) map[string]*pluginState {
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 		return nil
 	}
 
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		action := "skipping " + strconv.Quote(baseDir)
-		cmd.reportWarning(action, "cannot read directory", err)
+		cmd.warnf("%s: skipping %q: cannot read directory: %s", cmd.name, baseDir, err)
 		return nil
 	}
 
-	// Ignore anything that is not a git repository.
+	// Filter out non-git repositories.
 	entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
-		return !git.IsRepo(filepath.Join(baseDir, entry.Name()))
+		return !isRepo(filepath.Join(baseDir, entry.Name()))
 	})
 
-	states := make(map[string]*PluginState, len(entries))
+	states := make(map[string]*pluginState, len(entries))
+
+	type result struct {
+		state *pluginState
+		name  string
+	}
+	results := make(chan result, len(entries))
 
 	for _, entry := range entries {
-		pluginName := entry.Name()
-		if state := cmd.createState(baseDir, pluginName); state != nil {
-			states[pluginName] = state
+		go func() {
+			pluginName := entry.Name()
+			state := cmd.createState(ctx, baseDir, pluginName)
+			results <- result{name: pluginName, state: state}
+		}()
+	}
+
+	for range entries {
+		r := <-results
+		if r.state != nil {
+			states[r.name] = r.state
 		}
 	}
 
 	return states
 }
 
-func (cmd *cmdEnv) createState(baseDir, pluginName string) *PluginState {
+// createState determines the state of a single plugin.
+func (cmd *cmdEnv) createState(ctx context.Context, baseDir, pluginName string) *pluginState {
 	pluginDir := filepath.Join(baseDir, pluginName)
 
-	url, err := cmd.getPluginURL(pluginDir, pluginName)
+	url, err := repoURL(ctx, pluginDir)
 	if err != nil {
+		cmd.warnf("%s: skipping %q: cannot determine repo URL: %s", cmd.name, pluginName, err)
 		return nil
 	}
 
-	info, err := git.GetBranchInfo(pluginDir)
+	info, err := getBranchInfo(ctx, pluginDir)
 	if err != nil {
-		action := "skipping " + strconv.Quote(pluginName)
-		cmd.reportWarning(action, "cannot determine repo state", err)
+		cmd.warnf("%s: skipping %q: cannot determine repo state: %s", cmd.name, pluginName, err)
 		return nil
 	}
 
-	return &PluginState{
-		Name:      pluginName,
-		Directory: pluginDir,
-		URL:       url,
-		Branch:    info.Branch,
-		Hash:      info.Hash,
+	return &pluginState{
+		name:      pluginName,
+		directory: pluginDir,
+		url:       url,
+		branch:    info.branch,
+		hash:      info.hash,
 	}
-}
-
-func (cmd *cmdEnv) getPluginURL(pluginDir, pluginName string) (string, error) {
-	url, err := git.URL(pluginDir)
-	if err != nil {
-		action := "skipping " + strconv.Quote(pluginName)
-		cmd.reportWarning(action, "cannot determine repo URL", err)
-		return "", err
-	}
-	return url, nil
 }

@@ -1,55 +1,45 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"strconv"
-
-	"github.com/telemachus/pluggo/internal/git"
 )
 
-// PluginSpec represents a plugin specified in a user's configuration file.
-type PluginSpec struct {
-	URL    string
-	Name   string
-	Branch string
-	Opt    bool
-	Pinned bool
-}
-
-type syncResults []result
-
-func (cmd *cmdEnv) sync(pSpecs []PluginSpec, reporter *consoleReporter) {
-	if cmd.noOp() || !cmd.ensurePluginDirs() {
-		return
+// sync brings the local plugin state into agreement with the config file.
+func (cmd *cmdEnv) sync(ctx context.Context, pSpecs []pluginSpec, rep *reporter) error {
+	if err := cmd.ensurePluginDirs(); err != nil {
+		return err
 	}
 
-	statesByName := cmd.makeStateMap()
+	rep.start(cmd.name + ": processing plugins...")
+
+	statesByName := cmd.makeStateMap(ctx)
 	specsByName := makeSpecMap(pSpecs)
 
 	unwanted := findUnwanted(statesByName, specsByName)
-	cmd.results = make(syncResults, 0, len(pSpecs)+len(unwanted))
+	cmd.results = make([]result, 0, len(pSpecs)+len(unwanted))
 
-	reporter.start(cmd.name + ": processing " + strconv.Itoa(cap(cmd.results)) + " plugins...")
 	cmd.removeAll(unwanted)
-	cmd.reconcileLocal(statesByName, pSpecs)
+	cmd.reconcileLocal(ctx, statesByName, pSpecs)
+
+	return nil
 }
 
-func (cmd *cmdEnv) ensurePluginDirs() bool {
+// ensurePluginDirs creates the start/ and opt/ directories if needed.
+func (cmd *cmdEnv) ensurePluginDirs() error {
 	for _, wantedDir := range []string{cmd.startDir, cmd.optDir} {
-		if err := os.MkdirAll(wantedDir, os.ModePerm); err != nil {
-			reason := fmt.Sprintf("cannot create directory %q", wantedDir)
-			cmd.reportError(reason, err)
-
-			return false
+		if err := os.MkdirAll(wantedDir, 0o755); err != nil {
+			return fmt.Errorf("cannot create directory %q: %w", wantedDir, err)
 		}
 	}
 
-	return true
+	return nil
 }
 
-func makeSpecMap(pSpecs []PluginSpec) map[string]PluginSpec {
-	specsByName := make(map[string]PluginSpec, len(pSpecs))
+// makeSpecMap converts a slice of plugin specs into a map by name.
+func makeSpecMap(pSpecs []pluginSpec) map[string]pluginSpec {
+	specsByName := make(map[string]pluginSpec, len(pSpecs))
 	for _, p := range pSpecs {
 		specsByName[p.Name] = p
 	}
@@ -57,11 +47,45 @@ func makeSpecMap(pSpecs []PluginSpec) map[string]PluginSpec {
 	return specsByName
 }
 
-func (cmd *cmdEnv) reconcileLocal(statesByName map[string]*PluginState, pSpecs []PluginSpec) {
+// findUnwanted identifies plugins installed locally but not in the config.
+func findUnwanted(statesByName map[string]*pluginState, specsByName map[string]pluginSpec) map[string]string {
+	unwanted := make(map[string]string, len(statesByName))
+	for pluginName, state := range statesByName {
+		if _, exists := specsByName[pluginName]; !exists {
+			unwanted[pluginName] = state.directory
+		}
+	}
+
+	return unwanted
+}
+
+// removeAll removes unwanted plugins.
+func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
+	for pluginName, pluginPath := range unwanted {
+		if err := os.RemoveAll(pluginPath); err != nil {
+			cmd.warnf("%s: skipping %q: failed to remove plugin: %s", cmd.name, pluginName, err)
+			continue
+		}
+
+		cmd.results = append(cmd.results, result{
+			plugin: pluginName,
+			status: removed,
+		})
+	}
+}
+
+// reconcileLocal processes all plugins in parallel using goroutines.
+func (cmd *cmdEnv) reconcileLocal(ctx context.Context, statesByName map[string]*pluginState, pSpecs []pluginSpec) {
+	const maxWorkers = 15
+	sem := make(chan struct{}, maxWorkers)
 	ch := make(chan result, len(pSpecs))
+
 	for _, spec := range pSpecs {
-		// cmd.reconcile is safe even when statesByName[spec.Name] is nil.
-		go cmd.reconcile(statesByName[spec.Name], spec, ch)
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem }()
+			cmd.reconcile(ctx, statesByName[spec.Name], spec, ch)
+		}()
 	}
 
 	for range pSpecs {
@@ -70,112 +94,110 @@ func (cmd *cmdEnv) reconcileLocal(statesByName map[string]*PluginState, pSpecs [
 	}
 }
 
-func findUnwanted(statesByName map[string]*PluginState, specsByName map[string]PluginSpec) map[string]string {
-	unwanted := make(map[string]string, len(statesByName))
-
-	for pluginName, state := range statesByName {
-		if _, exists := specsByName[pluginName]; !exists {
-			unwanted[pluginName] = state.Directory
-		}
-	}
-
-	return unwanted
-}
-
-func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
-	for pluginName, pluginPath := range unwanted {
-		if err := os.RemoveAll(pluginPath); err != nil {
-			action := fmt.Sprintf("skipping %q", pluginName)
-			cmd.reportWarning(action, "failed to remove plugin", err)
-			continue
-		}
-
-		res := result{plugin: pluginName}
-		res.opResult.set(opRemoved)
-		cmd.results = append(cmd.results, res)
-	}
-}
-
-func (cmd *cmdEnv) reconcile(pState *PluginState, pSpec PluginSpec, ch chan<- result) {
+// reconcile determines what action to take for a single plugin.
+// This is the main decision tree: if not installed, install; if config changed, reinstall; otherwise move (if needed) and update (unless pinned).
+func (cmd *cmdEnv) reconcile(ctx context.Context, pState *pluginState, pSpec pluginSpec, ch chan<- result) {
+	// Plugin not installed locally: clone it.
 	if pState == nil {
-		cmd.manageInstall(pSpec, ch)
+		cmd.manageClone(ctx, pSpec, ch)
 		return
 	}
 
+	// URL or branch have changed: reinstall.
 	if changed, reason := cmd.hasConfigChanged(pState, pSpec); changed {
-		cmd.manageReinstall(pState, pSpec, reason, ch)
+		cmd.manageReinstall(ctx, pState, pSpec, reason, ch)
 		return
 	}
 
-	cmd.manageUpdate(pState, pSpec, ch)
+	// URL and branch unchanged: move if needed, then update if not pinned.
+	cmd.manageMoveAndUpdate(ctx, pState, pSpec, ch)
 }
 
-func (cmd *cmdEnv) manageInstall(pSpec PluginSpec, ch chan<- result) {
-	res := result{plugin: pSpec.Name}
+func (cmd *cmdEnv) manageClone(ctx context.Context, pSpec pluginSpec, ch chan<- result) {
+	if err := clone(ctx, pSpec.URL, pSpec.Branch, cmd.pluginPath(pSpec)); err != nil {
+		cmd.warnf("%s: clone %q failed: %s", cmd.name, pSpec.Name, err)
+		ch <- result{
+			plugin: pSpec.Name,
+			err:    err,
+		}
 
-	if err := cmd.install(pSpec); err != nil {
-		cmd.incrementWarn()
-		res.opResult.set(opError)
-		ch <- res
 		return
 	}
 
-	res.opResult.set(opInstalled)
-	ch <- res
-}
-
-func (cmd *cmdEnv) hasConfigChanged(pState *PluginState, pSpec PluginSpec) (changed bool, reason string) {
-	switch {
-	case pState.URL != pSpec.URL:
-		return true, "plugin URL changed"
-	case pState.Branch != pSpec.Branch:
-		return true, fmt.Sprintf("switching from branch %s to %s", pState.Branch, pSpec.Branch)
-	default:
-		return false, ""
+	ch <- result{
+		plugin: pSpec.Name,
+		status: installed,
 	}
 }
 
-func (cmd *cmdEnv) manageReinstall(pState *PluginState, pSpec PluginSpec, reason string, ch chan<- result) {
-	res := result{plugin: pSpec.Name}
-	if err := cmd.reinstall(pState.Directory, pSpec); err != nil {
-		cmd.incrementWarn()
-		res.opResult.set(opError)
-		ch <- res
+func (cmd *cmdEnv) manageReinstall(ctx context.Context, pState *pluginState, pSpec pluginSpec, reason string, ch chan<- result) {
+	if err := cmd.reinstall(ctx, pState.directory, pSpec); err != nil {
+		cmd.warnf("%s: reinstall %q failed: %s", cmd.name, pSpec.Name, err)
+		ch <- result{
+			plugin: pSpec.Name,
+			err:    err,
+		}
+
 		return
 	}
 
-	res.opResult.set(opReinstalled)
-	res.reason = reason
-	ch <- res
+	ch <- result{
+		plugin: pSpec.Name,
+		status: reinstalled,
+		reason: reason,
+	}
 }
 
-func (cmd *cmdEnv) manageUpdate(pState *PluginState, pSpec PluginSpec, ch chan<- result) {
-	res := cmd.update(pState, pSpec)
-
-	if res.opResult.has(opError) {
-		cmd.incrementWarn()
-		ch <- res
-
-		return
+func (cmd *cmdEnv) manageMoveAndUpdate(ctx context.Context, pState *pluginState, pSpec pluginSpec, ch chan<- result) {
+	res := result{
+		plugin: pSpec.Name,
+		// Default status is unchanged.
+		status: unchanged,
 	}
 
-	if res.opResult.has(opPinned) {
-		ch <- res
-
-		return
-	}
-
-	newHash, err := git.HeadDigest(pState.Directory)
+	// First, move the plugin if requested.
+	movedTo, err := cmd.move(pState, pSpec)
 	if err != nil {
-		cmd.incrementWarn()
-		res.opResult.set(opError)
+		cmd.warnf("%s: move %q failed: %s", cmd.name, pSpec.Name, err)
+		res.err = err
 		ch <- res
 
 		return
 	}
 
-	if !pState.Hash.Equals(newHash) {
-		res.opResult.set(opUpdated)
+	if movedTo != "" {
+		res.movedTo = movedTo
+	}
+
+	// Next, update the plugin if not pinned.
+	if pSpec.Pinned {
+		res.pinned = true
+		ch <- res
+
+		return
+	}
+
+	oldHash := pState.hash
+	if updateErr := cmd.update(ctx, pState); updateErr != nil {
+		cmd.warnf("%s: update %q failed: %s", cmd.name, pSpec.Name, updateErr)
+		res.err = updateErr
+		ch <- res
+
+		return
+	}
+
+	// Determine whether the plugin was actually updated.
+	info, err := getBranchInfo(ctx, pState.directory)
+	if err != nil {
+		cmd.warnf("%s: cannot determine new hash for %q: %s", cmd.name, pSpec.Name, err)
+		res.err = err
+		ch <- res
+
+		return
+	}
+
+	if !oldHash.equals(info.hash) {
+		res.status = updated
 	}
 
 	ch <- res

@@ -8,7 +8,7 @@ Pluggo is a command line tool to manage plugins for Vim and Neovim.
 
 ## Why is pluggo?
 
-I wanted a tool to install and update plugins for Vim and Neovim, but I did not
+I wanted a tool to install and update plugins for Vim and Neovim, but I didn't
 want the tool itself to be a Vim or Neovim plugin. So I wrote this in Go.
 
 ## What are pluggo's goals?
@@ -20,8 +20,9 @@ want the tool itself to be a Vim or Neovim plugin. So I wrote this in Go.
 
 ## Requirements and Installation
 
-Pluggo requires a working installation of Git in the user's `PATH`. (This may
-change if I switch from `exec` calls to a pure-Go library for Git operations.)
+Pluggo requires the Go runtime and a working installation of Git in the user's
+`PATH`. (At some point, I may offer binary releases to remove the dependency on
+Go's runtime.)
 
 To install, run the following command.
 
@@ -118,10 +119,13 @@ nvim --headless -c 'helptags ALL | quit'
 
 To update help tags in Vim, the following works though it's probably overkill.
 
-```vim
-" Run `:helptags ALL` every time that Vim starts.
-autocmd VimEnter * :helptags ALL
+```shell
+# We need a minimal vimrc since `vim -e` sets compatible and some plugins
+# require nocompatible. The `-u` flag requires a file, which we fake using
+# printf and /dev/stdin.
+printf 'set nocompatible\n' | vim -es -u /dev/stdin -c 'helptags ALL' -c 'quit'
 ```
+
 ## Suggestions, Requests, and Problems
 
 I intend to keep pluggo minimal, and I have designed it to fit my needs.

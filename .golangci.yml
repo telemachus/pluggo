@@ -1,59 +1,9 @@
-linters-settings:
-  cyclop:
-    max-complexity: 10
-    package-average: 0.0
-    skip-tests: false
-  copyloopvar:
-    check-alias: true
-  depguard:
-      rules:
-        main:
-          files:
-            - $all
-          deny:
-            - pkg: reflect
-              desc: "avoid reflect"
-        test:
-          files:
-            - $all
-          deny:
-            - pkg: reflect
-              desc: "avoid reflect"
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-    exclude-functions:
-      - fmt.Printf
-      - fmt.Println
-      - fmt.Fprintf
-      - fmt.Fprintln
-  exhaustive:
-    default-signifies-exhaustive: true
-  goconst:
-    min-len: 2
-    min-occurrences: 3
-  gocritic:
-    disabled-checks:
-      - hugeParam
-      - unnamedResult
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-  govet:
-    enable-all: true
-    shadow:
-      strict: true
-  nolintlint:
-    require-explanation: true
-    require-specific: true
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
-    - bodyclose
+    - asciicheck
+    - bidichk
     - copyloopvar
     - cyclop
     - depguard
@@ -64,30 +14,111 @@ linters:
     - errname
     - errorlint
     - exhaustive
+    - exptostd
+    - funlen
+    - gocheckcompilerdirectives
     - goconst
     - gocritic
+    - godoclint
     - gosec
-    - gosimple
     - govet
+    - iface
     - ineffassign
+    - intrange
     - ireturn
     - maintidx
+    - makezero
+    - mirror
     - misspell
-    - nolintlint
     - nakedret
+    - nestif
+    - nlreturn
+    - nolintlint
+    - nonamedreturns
+    - paralleltest
+    - perfsprint
     - prealloc
     - predeclared
-    - stylecheck
+    - recvcheck
     - thelper
-    - typecheck
+    - tparallel
     - unconvert
     - unparam
     - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
     - whitespace
-
+  settings:
+    copyloopvar:
+      check-alias: true
+    cyclop:
+      max-complexity: 10
+      package-average: 0
+    depguard:
+      rules:
+        main:
+          files:
+            - $all
+          deny:
+            - pkg: reflect
+              desc: avoid reflect
+        test:
+          files:
+            - $all
+          deny:
+            - pkg: reflect
+              desc: avoid reflect
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions:
+        - fmt.Printf
+        - fmt.Println
+        - fmt.Fprintf
+        - fmt.Fprintln
+    exhaustive:
+      default-signifies-exhaustive: true
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+    gocritic:
+      disabled-checks:
+        - hugeParam
+        - unnamedResult
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    gosec:
+      excludes:
+        - G104 # Don't let gosec check for unhandled errors.
+        - G301 # 755 for a directory is fine.
+        - G304 # The file variable comes from the user's configuration.
+    govet:
+      enable-all: true
+    nlreturn:
+      block-size: 2
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
+  fix: false
 run:
-  concurrency: 8
+  timeout: 2m
+  concurrency: 0
   issues-exit-code: 1
-  timeout: 30m
   tests: true
   allow-parallel-runners: false

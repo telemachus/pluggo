@@ -1,76 +1,61 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
+	"strings"
 )
 
-func (cmd *cmdEnv) install(pSpec PluginSpec) error {
-	dir := cmd.pluginPath(pSpec)
-	//nolint:gosec // pSpec.Branch and pSpec.URL come from user's own config file
-	gitCmd := exec.Command("git", "clone", "--filter=blob:none", "-b", pSpec.Branch, pSpec.URL, dir)
-	if err := gitCmd.Run(); err != nil {
-		return fmt.Errorf("git clone failed: %w", err)
+// reinstall removes and re-clones a plugin repository.
+func (cmd *cmdEnv) reinstall(ctx context.Context, dir string, pSpec pluginSpec) error {
+	// Verify dir is within expected plugin directories
+	if !strings.HasPrefix(dir, cmd.startDir) && !strings.HasPrefix(dir, cmd.optDir) {
+		return fmt.Errorf("refusing to remove directory outside plugin paths: %s", dir)
 	}
 
-	return nil
-}
-
-func (cmd *cmdEnv) reinstall(dir string, pSpec PluginSpec) error {
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("failed to remove existing directory: %w", err)
 	}
 
-	return cmd.install(pSpec)
+	return clone(ctx, pSpec.URL, pSpec.Branch, cmd.pluginPath(pSpec))
 }
 
-func (cmd *cmdEnv) update(pState *PluginState, pSpec PluginSpec) result {
-	// Move between start/ and opt/ subdirectories as needed; return early
-	// if the move fails.
-	res, err := cmd.ensureSubDir(pState, pSpec)
-	if err != nil {
-		return res
+// move relocates a plugin, returning where the plugin was moved and any error.
+func (cmd *cmdEnv) move(pState *pluginState, pSpec pluginSpec) (string, error) {
+	targetPath := cmd.pluginPath(pSpec)
+
+	// Return early if no move is needed.
+	if targetPath == pState.directory {
+		return "", nil
 	}
 
-	// Return early if we only needed to move.
-	if pSpec.Pinned {
-		return res
+	if err := os.Rename(pState.directory, targetPath); err != nil {
+		return "", err
 	}
 
-	//nolint:gosec // pState.Directory comes from user's own config file
-	updateCmd := exec.Command("git", "-C", pState.Directory, "pull", "--recurse-submodules")
-	if err := updateCmd.Run(); err != nil {
-		res.opResult.set(opError)
+	// Update state with new location.
+	pState.directory = targetPath
+
+	if pSpec.Opt {
+		return "opt", nil
 	}
 
-	return res
+	return "start", nil
 }
 
-func (cmd *cmdEnv) ensureSubDir(pState *PluginState, pSpec PluginSpec) (result, error) {
-	res := result{plugin: pSpec.Name}
+func (cmd *cmdEnv) update(ctx context.Context, pState *pluginState) error {
+	return pull(ctx, pState.directory)
+}
 
-	if pSpec.Pinned {
-		res.opResult.set(opPinned)
+// hasConfigChanged checks whether a plugin should be reinstalled.
+func (cmd *cmdEnv) hasConfigChanged(pState *pluginState, pSpec pluginSpec) (bool, string) {
+	switch {
+	case pState.url != pSpec.URL:
+		return true, "plugin URL changed"
+	case pState.branch != pSpec.Branch:
+		return true, fmt.Sprintf("switching from branch %s to %s", pState.branch, pSpec.Branch)
+	default:
+		return false, ""
 	}
-
-	pSpecPath := cmd.pluginPath(pSpec)
-
-	// Return early if the directory is already in the right place.
-	if pSpecPath == pState.Directory {
-		return res, nil
-	}
-
-	if err := os.Rename(pState.Directory, pSpecPath); err != nil {
-		res.opResult.set(opError)
-
-		return res, err
-	}
-
-	res.opResult.set(opMoved)
-	res.toOpt = pSpec.Opt
-
-	pState.Directory = pSpecPath
-
-	return res, nil
 }

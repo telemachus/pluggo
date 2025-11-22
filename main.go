@@ -1,4 +1,4 @@
-// Pluggo uses git to manage plugins for vim and neovim.
+// Pluggo manages Vim or Neovim plugins.
 package main
 
 import (
