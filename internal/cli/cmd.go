@@ -185,5 +185,5 @@ General:
   -h, --help		Print this help and exit
   -V, --version		Print version and exit
 
-For more information or to file a bug report, visit https://github.com/telemachus/pluggo.
+Source code: https://github.com/telemachus/pluggo
 `
