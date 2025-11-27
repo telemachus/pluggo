@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 )
 
 // sync brings the local plugin state into agreement with the config file.
@@ -28,9 +27,9 @@ func (cmd *cmdEnv) sync(ctx context.Context, pSpecs []pluginSpec, rep *reporter)
 
 // ensurePluginDirs creates the start/ and opt/ directories if needed.
 func (cmd *cmdEnv) ensurePluginDirs() error {
-	for _, wantedDir := range []string{cmd.startDir, cmd.optDir} {
-		if err := os.MkdirAll(wantedDir, 0o755); err != nil {
-			return fmt.Errorf("cannot create directory %q: %w", wantedDir, err)
+	for _, dirName := range []string{"start", "opt"} {
+		if err := cmd.dataRoot.MkdirAll(dirName, 0o755); err != nil {
+			return fmt.Errorf("cannot create directory %q: %w", dirName, err)
 		}
 	}
 
@@ -62,7 +61,13 @@ func findUnwanted(statesByName map[string]*pluginState, specsByName map[string]p
 // removeAll removes unwanted plugins.
 func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 	for pluginName, pluginPath := range unwanted {
-		if err := os.RemoveAll(pluginPath); err != nil {
+		relPath, err := cmd.relativePluginPath(pluginPath)
+		if err != nil {
+			cmd.warnf("%s: skipping %q: %s", cmd.name, pluginName, err)
+			continue
+		}
+
+		if err := cmd.dataRoot.RemoveAll(relPath); err != nil {
 			cmd.warnf("%s: skipping %q: failed to remove plugin: %s", cmd.name, pluginName, err)
 			continue
 		}
@@ -131,7 +136,7 @@ func (cmd *cmdEnv) manageClone(ctx context.Context, pSpec pluginSpec, ch chan<- 
 }
 
 func (cmd *cmdEnv) manageReinstall(ctx context.Context, pState *pluginState, pSpec pluginSpec, reason string, ch chan<- result) {
-	if err := cmd.reinstall(ctx, pState.directory, pSpec); err != nil {
+	if err := cmd.reinstall(ctx, pState, pSpec); err != nil {
 		cmd.warnf("%s: reinstall %q failed: %s", cmd.name, pSpec.Name, err)
 		ch <- result{
 			plugin: pSpec.Name,
@@ -186,8 +191,8 @@ func (cmd *cmdEnv) manageMoveAndUpdate(ctx context.Context, pState *pluginState,
 		return
 	}
 
-	// Determine whether the plugin was actually updated.
-	info, err := getBranchInfo(ctx, pState.directory)
+	// Check if the update changed the hash.
+	wasUpdated, err := cmd.checkPluginUpdated(ctx, pState, oldHash)
 	if err != nil {
 		cmd.warnf("%s: cannot determine new hash for %q: %s", cmd.name, pSpec.Name, err)
 		res.err = err
@@ -196,9 +201,33 @@ func (cmd *cmdEnv) manageMoveAndUpdate(ctx context.Context, pState *pluginState,
 		return
 	}
 
-	if !oldHash.equals(info.hash) {
+	if wasUpdated {
 		res.status = updated
 	}
 
 	ch <- res
+}
+
+func (cmd *cmdEnv) checkPluginUpdated(ctx context.Context, pState *pluginState, oldHash digest) (_ bool, err error) {
+	relPath, pathErr := cmd.relativePluginPath(pState.directory)
+	if pathErr != nil {
+		return false, pathErr
+	}
+
+	pluginRoot, openErr := cmd.dataRoot.OpenRoot(relPath)
+	if openErr != nil {
+		return false, openErr
+	}
+	defer func() {
+		if closeErr := pluginRoot.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+
+	info, err := getBranchInfo(ctx, pluginRoot, pState.directory)
+	if err != nil {
+		return false, err
+	}
+
+	return !oldHash.equals(info.hash), nil
 }

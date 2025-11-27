@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,8 +12,24 @@ import (
 func (cmd *cmdEnv) makeStateMap(ctx context.Context) map[string]*pluginState {
 	statesByName := make(map[string]*pluginState, 20)
 
-	for _, baseDir := range []string{cmd.startDir, cmd.optDir} {
-		states := cmd.scanPackDir(ctx, baseDir)
+	for _, dirInfo := range []struct {
+		name string
+		path string
+	}{
+		{"start", cmd.startDir},
+		{"opt", cmd.optDir},
+	} {
+		dirRoot, err := cmd.dataRoot.OpenRoot(dirInfo.name)
+		if err != nil {
+			// Directory doesn't exist yet or can't be opened; skip it
+			continue
+		}
+
+		states := cmd.scanPackDir(ctx, dirRoot, dirInfo.path)
+		if closeErr := dirRoot.Close(); closeErr != nil {
+			cmd.warnf("%s: error closing %s root: %s", cmd.name, dirInfo.name, closeErr)
+		}
+
 		for pluginName, state := range states {
 			if _, exists := statesByName[pluginName]; exists {
 				cmd.warnf("%s: duplicate plugin %q found in both start/ and opt/ directories", cmd.name, pluginName)
@@ -27,20 +44,16 @@ func (cmd *cmdEnv) makeStateMap(ctx context.Context) map[string]*pluginState {
 }
 
 // scanPackDir scans a directory for git repositories representing plugins.
-func (cmd *cmdEnv) scanPackDir(ctx context.Context, baseDir string) map[string]*pluginState {
-	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-		return nil
-	}
-
-	entries, err := os.ReadDir(baseDir)
+func (cmd *cmdEnv) scanPackDir(ctx context.Context, dirRoot *os.Root, baseDir string) map[string]*pluginState {
+	entries, err := fs.ReadDir(dirRoot.FS(), ".")
 	if err != nil {
 		cmd.warnf("%s: skipping %q: cannot read directory: %s", cmd.name, baseDir, err)
 		return nil
 	}
 
 	// Filter out non-git repositories.
-	entries = slices.DeleteFunc(entries, func(entry os.DirEntry) bool {
-		return !isRepo(filepath.Join(baseDir, entry.Name()))
+	entries = slices.DeleteFunc(entries, func(entry fs.DirEntry) bool {
+		return !isRepo(dirRoot, entry.Name())
 	})
 
 	states := make(map[string]*pluginState, len(entries))
@@ -79,7 +92,24 @@ func (cmd *cmdEnv) createState(ctx context.Context, baseDir, pluginName string) 
 		return nil
 	}
 
-	info, err := getBranchInfo(ctx, pluginDir)
+	relPath, err := cmd.relativePluginPath(pluginDir)
+	if err != nil {
+		cmd.warnf("%s: skipping %q: %s", cmd.name, pluginName, err)
+		return nil
+	}
+
+	pluginRoot, err := cmd.dataRoot.OpenRoot(relPath)
+	if err != nil {
+		cmd.warnf("%s: skipping %q: cannot open plugin root: %s", cmd.name, pluginName, err)
+		return nil
+	}
+	defer func() {
+		if closeErr := pluginRoot.Close(); closeErr != nil {
+			cmd.warnf("%s: error closing plugin root for %q: %s", cmd.name, pluginName, closeErr)
+		}
+	}()
+
+	info, err := getBranchInfo(ctx, pluginRoot, pluginDir)
 	if err != nil {
 		cmd.warnf("%s: skipping %q: cannot determine repo state: %s", cmd.name, pluginName, err)
 		return nil

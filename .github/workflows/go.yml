@@ -15,7 +15,7 @@ jobs:
           - ubuntu-latest
           - macos-latest
           - windows-latest
-        go: ['1.24', '1.25']
+        go: ['1.25']
     name: pluggone test (using go ${{ matrix.go }} on ${{ matrix.os }})
     steps:
       - uses: actions/checkout@v6

@@ -3,18 +3,16 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 )
 
 // reinstall removes and re-clones a plugin repository.
-func (cmd *cmdEnv) reinstall(ctx context.Context, dir string, pSpec pluginSpec) error {
-	// Verify dir is within expected plugin directories
-	if !strings.HasPrefix(dir, cmd.startDir) && !strings.HasPrefix(dir, cmd.optDir) {
-		return fmt.Errorf("refusing to remove directory outside plugin paths: %s", dir)
+func (cmd *cmdEnv) reinstall(ctx context.Context, pState *pluginState, pSpec pluginSpec) error {
+	relPath, err := cmd.relativePluginPath(pState.directory)
+	if err != nil {
+		return err
 	}
 
-	if err := os.RemoveAll(dir); err != nil {
+	if err := cmd.dataRoot.RemoveAll(relPath); err != nil {
 		return fmt.Errorf("failed to remove existing directory: %w", err)
 	}
 
@@ -30,7 +28,17 @@ func (cmd *cmdEnv) move(pState *pluginState, pSpec pluginSpec) (string, error) {
 		return "", nil
 	}
 
-	if err := os.Rename(pState.directory, targetPath); err != nil {
+	srcRelPath, err := cmd.relativePluginPath(pState.directory)
+	if err != nil {
+		return "", err
+	}
+
+	dstRelPath, err := cmd.relativePluginPath(targetPath)
+	if err != nil {
+		return "", err
+	}
+
+	if err := cmd.dataRoot.Rename(srcRelPath, dstRelPath); err != nil {
 		return "", err
 	}
 

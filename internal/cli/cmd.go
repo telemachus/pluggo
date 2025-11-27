@@ -19,6 +19,7 @@ type cmdEnv struct {
 	dataDir       string
 	startDir      string
 	optDir        string
+	dataRoot      *os.Root
 	results       []result
 	warnings      atomic.Uint64
 	debugWanted   bool
@@ -69,6 +70,29 @@ func cmdFrom(name, version string, args []string) (*cmdEnv, error) {
 	}
 
 	return cmd, nil
+}
+
+func (cmd *cmdEnv) openRoot() error {
+	// Ensure dataDir exists before opening root
+	if err := os.MkdirAll(cmd.dataDir, 0o755); err != nil {
+		return fmt.Errorf("cannot create data directory %q: %w", cmd.dataDir, err)
+	}
+
+	root, err := os.OpenRoot(cmd.dataDir)
+	if err != nil {
+		return fmt.Errorf("cannot open data directory root: %w", err)
+	}
+	cmd.dataRoot = root
+
+	return nil
+}
+
+func (cmd *cmdEnv) Close() error {
+	if cmd.dataRoot != nil {
+		return cmd.dataRoot.Close()
+	}
+
+	return nil
 }
 
 func (cmd *cmdEnv) plugins() ([]pluginSpec, error) {
@@ -161,6 +185,17 @@ func (cmd *cmdEnv) pluginPath(pSpec pluginSpec) string {
 	}
 
 	return filepath.Join(cmd.startDir, pSpec.Name)
+}
+
+// relativePluginPath returns the path relative to dataDir for use with dataRoot.
+// An error indicates corrupted internal state and should be treated as fatal.
+func (cmd *cmdEnv) relativePluginPath(fullPath string) (string, error) {
+	rel, err := filepath.Rel(cmd.dataDir, fullPath)
+	if err != nil {
+		return "", fmt.Errorf("cannot compute relative path from %q to %q: %w", cmd.dataDir, fullPath, err)
+	}
+
+	return rel, nil
 }
 
 // warnf counts non-fatal failures and, in debug mode, displays them too.

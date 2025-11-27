@@ -27,8 +27,8 @@ func repoURL(ctx context.Context, repoDir string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-func isRepo(dir string) bool {
-	info, err := os.Stat(filepath.Join(dir, ".git"))
+func isRepo(pluginRoot *os.Root, pluginName string) bool {
+	info, err := pluginRoot.Lstat(filepath.Join(pluginName, ".git"))
 	if err != nil {
 		return false
 	}
@@ -82,9 +82,9 @@ type branchInfo struct {
 }
 
 // getBranchInfo returns the branch name and SHA digest of a git repository.
-func getBranchInfo(ctx context.Context, repoDir string) (branchInfo, error) {
+func getBranchInfo(ctx context.Context, pluginRoot *os.Root, repoDir string) (branchInfo, error) {
 	// Try the filesystem first since it's far faster and usually works.
-	info, err := getBranchInfoViaFilesystem(repoDir)
+	info, err := getBranchInfoViaFilesystem(pluginRoot)
 	if err == nil {
 		return info, nil
 	}
@@ -93,18 +93,27 @@ func getBranchInfo(ctx context.Context, repoDir string) (branchInfo, error) {
 	return getBranchInfoViaGit(ctx, repoDir)
 }
 
-func getBranchInfoViaFilesystem(repoDir string) (branchInfo, error) {
+func getBranchInfoViaFilesystem(pluginRoot *os.Root) (_ branchInfo, err error) {
 	var info branchInfo
 
-	branchRef, err := getBranchRef(repoDir)
+	gitRoot, openErr := pluginRoot.OpenRoot(".git")
+	if openErr != nil {
+		return info, openErr
+	}
+	defer func() {
+		if closeErr := gitRoot.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+
+	branchRef, err := getBranchRef(gitRoot)
 	if err != nil {
 		return info, err
 	}
 
 	info.branch = strings.TrimPrefix(branchRef, "refs/heads/")
 
-	branchRefFile := filepath.Join(repoDir, ".git", branchRef)
-	hash, err := readDigest(branchRefFile)
+	hash, err := readDigest(gitRoot, branchRef)
 	if err != nil {
 		return info, err
 	}
@@ -142,9 +151,8 @@ func getBranchInfoViaGit(ctx context.Context, repoDir string) (branchInfo, error
 }
 
 // getBranchRef reads the branch reference from .git/HEAD.
-func getBranchRef(repoDir string) (string, error) {
-	headFile := filepath.Join(repoDir, ".git", "HEAD")
-	data, err := os.ReadFile(headFile)
+func getBranchRef(gitRoot *os.Root) (string, error) {
+	data, err := gitRoot.ReadFile("HEAD")
 	if err != nil {
 		return "", err
 	}
@@ -159,8 +167,8 @@ func getBranchRef(repoDir string) (string, error) {
 	return string(data), nil
 }
 
-func readDigest(filename string) (digest, error) {
-	data, err := os.ReadFile(filename)
+func readDigest(gitRoot *os.Root, refPath string) (digest, error) {
+	data, err := gitRoot.ReadFile(refPath)
 	if err != nil {
 		return nil, err
 	}

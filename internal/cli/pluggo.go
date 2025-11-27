@@ -36,6 +36,16 @@ func Pluggo(args []string) int {
 		return 1
 	}
 
+	if err := cmd.openRoot(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", cmdName, err)
+		return 1
+	}
+	defer func() {
+		if err := cmd.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "%s: failed to close root: %s\n", cmdName, err)
+		}
+	}()
+
 	if err := cmd.process(ctx, plugins); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", cmdName, err)
 		return 1
