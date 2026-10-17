@@ -1,7 +1,5 @@
 {
-    "dataDir": [
-        "HOME"
-    ],
+    "dataDir": "~",
     "plugins": [
         {
             "branch": "main",

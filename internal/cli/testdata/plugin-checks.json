@@ -1,7 +1,5 @@
 {
-    "dataDir": [
-        "HOME"
-    ],
+    "dataDir": "~/.local/share/nvim/site/pack/pluggo",
     "plugins": [
         {
             "branch": "main",

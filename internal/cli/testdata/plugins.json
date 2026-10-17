@@ -1,7 +1,5 @@
 {
-    "dataDir": [
-        "/home/user"
-    ],
+    "dataDir": "/home/user",
     "plugins": [
         {
             "branch": "foo",

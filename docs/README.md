@@ -21,8 +21,10 @@ want the tool itself to be a Vim or Neovim plugin. So I wrote this in Go.
 ## Requirements and Installation
 
 Pluggo requires the Go runtime and a working installation of Git in the user's
-`PATH`. (At some point, I may offer binary releases to remove the dependency on
+`PATH`.
+(At some point, I may offer binary releases to remove the dependency on
 Go's runtime.)
+Pluggo supports Unix-like operating systems.
 
 To install, run the following command.
 
@@ -39,15 +41,7 @@ Pluggo needs a configuration file with the following structure:
 
 ```json
 {
-    "dataDir": [
-        "HOME",
-        ".local",
-        "share",
-        "nvim",
-        "site",
-        "pack",
-        "pluggo"
-    ],
+    "dataDir": "~/.local/share/nvim/site/pack/pluggo",
     "plugins": [
         {
             "branch": "master",
@@ -67,14 +61,12 @@ Pluggo needs a configuration file with the following structure:
 
 ### Re `"dataDir"`
 
-+ The `"dataDir"` array will be combined with an OS-specific path separator.
-  E.g., `${HOME}/.local/share/nvim/site/pack/pluggo` on Linux and macOS for the
-  JSON above.
-+ Plugins are installed in start/ or opt/ subdirectories of that directory. See
++ A leading `~` or `~/` is expanded to the user's home directory.
+  Only those two forms expand: `~user`, a `~` later in the path, and `$HOME`
+  are left as written.
++ The resulting path must be absolute.
++ Plugins are installed in start/ or opt/ subdirectories of `"dataDir"`. See
   below for the `"opt"` item in `"plugins"`.
-+ As a convenience, if the first item in the `"dataDir"` array is `"HOME"` or
-  `"~"`, pluggo will replace this value with the user's home directory.
-  The resulting path must be absolute.
 
 ### Re `"plugins"`
 

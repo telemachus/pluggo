@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"github.com/telemachus/opts"
@@ -84,8 +85,8 @@ func (cmd *cmdEnv) plugins() ([]pluginSpec, error) {
 }
 
 type config struct {
+	DataDir string       `json:"dataDir"`
 	Plugins []pluginSpec `json:"plugins"`
-	DataDir []string     `json:"dataDir"`
 }
 
 func (cmd *cmdEnv) loadConfig() (config, error) {
@@ -103,16 +104,8 @@ func (cmd *cmdEnv) loadConfig() (config, error) {
 	return cfg, nil
 }
 
-func (cmd *cmdEnv) setupDirs(dataDirParts []string) error {
-	// Substitute user's home directory for "HOME" or "~" at the start of dataDir.
-	if len(dataDirParts) > 0 {
-		switch dataDirParts[0] {
-		case "HOME", "~":
-			dataDirParts[0] = cmd.homeDir
-		}
-	}
-
-	cmd.dataDir = filepath.Join(dataDirParts...)
+func (cmd *cmdEnv) setupDirs(dataDir string) error {
+	cmd.dataDir = tildeSwap(cmd.homeDir, dataDir)
 	if cmd.dataDir == "" {
 		return errors.New("dataDir is required in configuration")
 	}
@@ -124,6 +117,19 @@ func (cmd *cmdEnv) setupDirs(dataDirParts []string) error {
 	cmd.optDir = filepath.Join(cmd.dataDir, "opt")
 
 	return nil
+}
+
+// tildeSwap expands a bare "~" or a leading "~/" to the home directory and
+// returns any other path unchanged.
+func tildeSwap(home, path string) string {
+	if path == "~" {
+		return home
+	}
+	if s, ok := strings.CutPrefix(path, "~/"); ok {
+		return filepath.Join(home, s)
+	}
+
+	return path
 }
 
 // filterPlugins drops plugins that lack a name, URL, or branch. It also drops
