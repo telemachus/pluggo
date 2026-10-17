@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -18,7 +20,7 @@ func fakeCmdEnv(confFile string) *cmdEnv {
 	return &cmdEnv{
 		name:     "test",
 		confFile: confFile,
-		homeDir:  "/tmp/test-home",
+		homeDir:  filepath.Join(os.TempDir(), "test-home"), // Absolute on all platforms.
 	}
 }
 
