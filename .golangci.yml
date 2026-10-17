@@ -95,6 +95,7 @@ linters:
     gosec:
       excludes:
         - G104 # Don't let gosec check for unhandled errors.
+        - G204 # Subprocesses run git directly, not via a shell.
         - G301 # 755 for a directory is fine.
         - G304 # The file variable comes from the user's configuration.
     govet:

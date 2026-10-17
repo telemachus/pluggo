@@ -7,6 +7,9 @@ import (
 	"slices"
 )
 
+// maxWorkers limits how many plugins are scanned or processed at once.
+const maxWorkers = 15
+
 // makeStateMap scans the plugin directories and returns a map of installed plugins.
 func (cmd *cmdEnv) makeStateMap(ctx context.Context) map[string]*pluginState {
 	statesByName := make(map[string]*pluginState, 20)
@@ -28,10 +31,6 @@ func (cmd *cmdEnv) makeStateMap(ctx context.Context) map[string]*pluginState {
 
 // scanPackDir scans a directory for git repositories representing plugins.
 func (cmd *cmdEnv) scanPackDir(ctx context.Context, baseDir string) map[string]*pluginState {
-	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
-		return nil
-	}
-
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		cmd.warnf("%s: skipping %q: cannot read directory: %s", cmd.name, baseDir, err)
@@ -49,10 +48,13 @@ func (cmd *cmdEnv) scanPackDir(ctx context.Context, baseDir string) map[string]*
 		state *pluginState
 		name  string
 	}
+	sem := make(chan struct{}, maxWorkers)
 	results := make(chan result, len(entries))
 
 	for _, entry := range entries {
+		sem <- struct{}{}
 		go func() {
+			defer func() { <-sem }()
 			pluginName := entry.Name()
 			state := cmd.createState(ctx, baseDir, pluginName)
 			results <- result{name: pluginName, state: state}

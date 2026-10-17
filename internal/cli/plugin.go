@@ -5,8 +5,8 @@ type pluginSpec struct {
 	URL    string `json:"url"`
 	Name   string `json:"name"`
 	Branch string `json:"branch"`
-	Opt    bool   `json:"opt,omitempty"`
-	Pinned bool   `json:"pin,omitempty"`
+	Opt    bool   `json:"opt"`
+	Pinned bool   `json:"pin"`
 }
 
 // pluginState represents a plugin installed locally.

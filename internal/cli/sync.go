@@ -76,7 +76,6 @@ func (cmd *cmdEnv) removeAll(unwanted map[string]string) {
 
 // reconcileLocal processes all plugins in parallel using goroutines.
 func (cmd *cmdEnv) reconcileLocal(ctx context.Context, statesByName map[string]*pluginState, pSpecs []pluginSpec) {
-	const maxWorkers = 15
 	sem := make(chan struct{}, maxWorkers)
 	ch := make(chan result, len(pSpecs))
 
@@ -104,7 +103,7 @@ func (cmd *cmdEnv) reconcile(ctx context.Context, pState *pluginState, pSpec plu
 	}
 
 	// URL or branch have changed: reinstall.
-	if changed, reason := cmd.hasConfigChanged(pState, pSpec); changed {
+	if changed, reason := hasConfigChanged(pState, pSpec); changed {
 		cmd.manageReinstall(ctx, pState, pSpec, reason, ch)
 		return
 	}
@@ -178,7 +177,7 @@ func (cmd *cmdEnv) manageMoveAndUpdate(ctx context.Context, pState *pluginState,
 	}
 
 	oldHash := pState.hash
-	if updateErr := cmd.update(ctx, pState); updateErr != nil {
+	if updateErr := pull(ctx, pState.directory); updateErr != nil {
 		cmd.warnf("%s: update %q failed: %s", cmd.name, pSpec.Name, updateErr)
 		res.err = updateErr
 		ch <- res

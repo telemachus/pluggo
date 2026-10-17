@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
 )
 
 // reinstall removes and re-clones a plugin repository.
 func (cmd *cmdEnv) reinstall(ctx context.Context, dir string, pSpec pluginSpec) error {
-	// Verify dir is within expected plugin directories
-	if !strings.HasPrefix(dir, cmd.startDir) && !strings.HasPrefix(dir, cmd.optDir) {
+	// Verify dir is directly within the expected plugin directories.
+	if parent := filepath.Dir(dir); parent != cmd.startDir && parent != cmd.optDir {
 		return fmt.Errorf("refusing to remove directory outside plugin paths: %s", dir)
 	}
 
@@ -44,12 +44,8 @@ func (cmd *cmdEnv) move(pState *pluginState, pSpec pluginSpec) (string, error) {
 	return "start", nil
 }
 
-func (cmd *cmdEnv) update(ctx context.Context, pState *pluginState) error {
-	return pull(ctx, pState.directory)
-}
-
 // hasConfigChanged checks whether a plugin should be reinstalled.
-func (cmd *cmdEnv) hasConfigChanged(pState *pluginState, pSpec pluginSpec) (bool, string) {
+func hasConfigChanged(pState *pluginState, pSpec pluginSpec) (bool, string) {
 	switch {
 	case pState.url != pSpec.URL:
 		return true, "plugin URL changed"

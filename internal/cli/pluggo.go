@@ -49,7 +49,7 @@ func Pluggo(args []string) int {
 }
 
 func (cmd *cmdEnv) process(ctx context.Context, pSpecs []pluginSpec) error {
-	rep := newReporter("    ", cmd.quietWanted)
+	rep := newReporter("    ", cmd.quietWanted, cmd.debugWanted)
 
 	if err := cmd.sync(ctx, pSpecs, rep); err != nil {
 		return err

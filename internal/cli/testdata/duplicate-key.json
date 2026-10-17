@@ -1,0 +1,14 @@
+{
+    "dataDir": [
+        "HOME"
+    ],
+    "plugins": [
+        {
+            "branch": "main",
+            "name": "test.git",
+            "opt": false,
+            "opt": true,
+            "url": "https://github.com/user/test.git"
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+{
+    "dataDir": [
+        "~/.local/share/nvim/site/pack/pluggo"
+    ],
+    "plugins": [
+        {
+            "branch": "main",
+            "name": "test.git",
+            "url": "https://github.com/user/test.git"
+        }
+    ]
+}

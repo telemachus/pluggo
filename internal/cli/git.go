@@ -14,12 +14,41 @@ import (
 
 // Git command operations
 
+// runGit runs git with args and returns its standard output. Git fails rather
+// than prompting for credentials, and it gets a chance to clean up when ctx is
+// done. On failure, the error includes the last line of git's error output,
+// which usually explains the problem.
+func runGit(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.WaitDelay = 5 * time.Second
+
+	output, err := cmd.Output()
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		if line := lastLine(exitErr.Stderr); line != "" {
+			return output, fmt.Errorf("%s (%w)", line, err)
+		}
+	}
+
+	return output, err
+}
+
+func lastLine(data []byte) string {
+	data = bytes.TrimSpace(data)
+	if _, after, found := bytes.CutLast(data, []byte("\n")); found {
+		return string(bytes.TrimSpace(after))
+	}
+
+	return string(data)
+}
+
 func repoURL(ctx context.Context, repoDir string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "-C", repoDir, "ls-remote", "--get-url")
-	output, err := cmd.Output()
+	// Read the raw URL; ls-remote --get-url would apply insteadOf rewrites.
+	output, err := runGit(ctx, "-C", repoDir, "config", "--get", "remote.origin.url")
 	if err != nil {
 		return "", fmt.Errorf("failed to get repository URL: %w", err)
 	}
@@ -29,20 +58,15 @@ func repoURL(ctx context.Context, repoDir string) (string, error) {
 
 func isRepo(dir string) bool {
 	info, err := os.Stat(filepath.Join(dir, ".git"))
-	if err != nil {
-		return false
-	}
 
-	// Most git repos have a .git directory; submodules have a .git file.
-	return info.IsDir() || info.Mode().IsRegular()
+	return err == nil && info.IsDir()
 }
 
 func clone(ctx context.Context, url, branch, destDir string) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "clone", "--filter=blob:none", "-b", branch, url, destDir)
-	if err := cmd.Run(); err != nil {
+	if _, err := runGit(ctx, "clone", "--filter=blob:none", "-b", branch, url, destDir); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
@@ -53,8 +77,7 @@ func pull(ctx context.Context, repoDir string) error {
 	ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "-C", repoDir, "pull", "--recurse-submodules")
-	if err := cmd.Run(); err != nil {
+	if _, err := runGit(ctx, "-C", repoDir, "pull"); err != nil {
 		return fmt.Errorf("git pull failed: %w", err)
 	}
 
@@ -119,24 +142,23 @@ func getBranchInfoViaGit(ctx context.Context, repoDir string) (branchInfo, error
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// Get both branch name and hash in one call.
-	cmd := exec.CommandContext(ctx, "git", "-C", repoDir, "rev-parse", "--abbrev-ref", "HEAD", "HEAD")
-	output, err := cmd.Output()
+	// Get both hash and branch name in one call. Order matters: --abbrev-ref
+	// applies to every argument after it, so the hash must come first.
+	output, err := runGit(ctx, "-C", repoDir, "rev-parse", "HEAD", "--abbrev-ref", "HEAD")
 	if err != nil {
 		return info, fmt.Errorf("failed to get branch info: %w", err)
 	}
 
-	lines := bytes.Split(bytes.TrimSpace(output), []byte("\n"))
-	if len(lines) != 2 {
+	hash, branch, found := bytes.Cut(bytes.TrimSpace(output), []byte("\n"))
+	if !found {
 		return info, errors.New("unexpected git output format")
 	}
 
-	branch := string(lines[0])
-	if branch == "HEAD" {
+	if string(branch) == "HEAD" {
 		return info, errDetachedHead
 	}
-	info.branch = branch
-	info.hash = digest(lines[1])
+	info.branch = string(branch)
+	info.hash = digest(hash)
 
 	return info, nil
 }
@@ -149,14 +171,12 @@ func getBranchRef(repoDir string) (string, error) {
 		return "", err
 	}
 
-	if !bytes.HasPrefix(data, []byte("ref: ")) {
+	ref, found := bytes.CutPrefix(data, []byte("ref: "))
+	if !found {
 		return "", errDetachedHead
 	}
 
-	data = bytes.TrimPrefix(data, []byte("ref: "))
-	data = trimLineEnd(data)
-
-	return string(data), nil
+	return string(bytes.TrimSpace(ref)), nil
 }
 
 func readDigest(filename string) (digest, error) {
@@ -165,12 +185,5 @@ func readDigest(filename string) (digest, error) {
 		return nil, err
 	}
 
-	return digest(trimLineEnd(data)), nil
-}
-
-func trimLineEnd(data []byte) []byte {
-	data = bytes.TrimSuffix(data, []byte("\r\n"))
-	data = bytes.TrimSuffix(data, []byte("\n"))
-
-	return data
+	return digest(bytes.TrimSpace(data)), nil
 }

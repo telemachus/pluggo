@@ -72,8 +72,9 @@ Pluggo needs a configuration file with the following structure:
   JSON above.
 + Plugins are installed in start/ or opt/ subdirectories of that directory. See
   below for the `"opt"` item in `"plugins"`.
-+ As a convenience, if the first item in the `"dataDirs"` array is `"HOME"`,
-  pluggo will replace this value with the user's home directory.
++ As a convenience, if the first item in the `"dataDir"` array is `"HOME"` or
+  `"~"`, pluggo will replace this value with the user's home directory.
+  The resulting path must be absolute.
 
 ### Re `"plugins"`
 

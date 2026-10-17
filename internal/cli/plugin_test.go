@@ -61,8 +61,9 @@ func TestPluginChecks(t *testing.T) {
 		t.Fatalf("test cannot finish since cmd.plugins() failed: %v", err)
 	}
 
-	// Only the last plugin should be valid (has all required fields).
-	// The first has no name, second has no URL, third has no branch.
+	// Only the fourth plugin should be valid (has all required fields).
+	// The first has no name, second has no URL, third has no branch, fifth
+	// repeats the fourth's name, and sixth has an unsafe name.
 	if len(plugins) != 1 {
 		t.Errorf("cmd.plugins(%q) expected len(plugins) = 1; actual: %d", confFile, len(plugins))
 	}
@@ -76,5 +77,38 @@ func TestMissingDataDirError(t *testing.T) {
 
 	if err == nil {
 		t.Error("expected error for missing dataDir")
+	}
+}
+
+func TestUnknownKeyError(t *testing.T) {
+	t.Parallel()
+
+	cmd := fakeCmdEnv("testdata/unknown-key.json")
+	_, err := cmd.plugins()
+
+	if err == nil {
+		t.Error("expected error for unknown config key")
+	}
+}
+
+func TestDuplicateKeyError(t *testing.T) {
+	t.Parallel()
+
+	cmd := fakeCmdEnv("testdata/duplicate-key.json")
+	_, err := cmd.plugins()
+
+	if err == nil {
+		t.Error("expected error for duplicate config key")
+	}
+}
+
+func TestRelativeDataDirError(t *testing.T) {
+	t.Parallel()
+
+	cmd := fakeCmdEnv("testdata/relative-datadir.json")
+	_, err := cmd.plugins()
+
+	if err == nil {
+		t.Error("expected error for relative dataDir")
 	}
 }

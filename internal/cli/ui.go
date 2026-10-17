@@ -2,7 +2,9 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,12 +25,8 @@ func newSpinner() *spinner {
 }
 
 func (s *spinner) start(message string) {
-	s.done.Add(1)
-	go func() {
-		defer s.done.Done()
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-
+	s.done.Go(func() {
+		tick := time.Tick(100 * time.Millisecond)
 		frame := 0
 		for {
 			select {
@@ -36,12 +34,12 @@ func (s *spinner) start(message string) {
 				// Clear the line.
 				fmt.Fprint(os.Stderr, "\r\033[K")
 				return
-			case <-ticker.C:
+			case <-tick:
 				fmt.Fprintf(os.Stderr, "\r%s %s", s.frames[frame], message)
 				frame = (frame + 1) % len(s.frames)
 			}
 		}
-	}()
+	})
 }
 
 func (s *spinner) stop() {
@@ -49,22 +47,37 @@ func (s *spinner) stop() {
 	s.done.Wait()
 }
 
-// reporter handles progress display and result formatting.
-type reporter struct {
-	spinner     *spinner
-	indent      string
-	quietWanted bool
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+
+	fi, err := f.Stat()
+
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
-func newReporter(indent string, quietWanted bool) *reporter {
+// reporter handles progress display and result formatting.
+type reporter struct {
+	spinner       *spinner
+	indent        string
+	quietWanted   bool
+	spinnerWanted bool
+}
+
+// newReporter returns a reporter. The spinner appears only on a terminal, and
+// not in quiet mode or in debug mode, where warnings would garble it.
+func newReporter(indent string, quietWanted, debugWanted bool) *reporter {
 	return &reporter{
-		indent:      indent,
-		quietWanted: quietWanted,
+		indent:        indent,
+		quietWanted:   quietWanted,
+		spinnerWanted: !quietWanted && !debugWanted && isTerminal(os.Stderr),
 	}
 }
 
 func (r *reporter) start(banner string) {
-	if !r.quietWanted {
+	if r.spinnerWanted {
 		r.spinner = newSpinner()
 		r.spinner.start(banner)
 	}
@@ -74,6 +87,10 @@ func (r *reporter) finish(results []result) {
 	if r.spinner != nil {
 		r.spinner.stop()
 	}
+
+	slices.SortFunc(results, func(a, b result) int {
+		return strings.Compare(a.plugin, b.plugin)
+	})
 
 	if r.quietWanted {
 		r.printErrorsOnly(results)
@@ -98,17 +115,15 @@ func (r *reporter) printErrorsOnly(results []result) {
 }
 
 func (r *reporter) formatResult(res result) string {
-	var msg strings.Builder
-	msg.WriteString(r.indent)
-	msg.WriteString(res.plugin)
-	msg.WriteString(": ")
-	msg.WriteString(r.formatStatus(res))
-
-	return msg.String()
+	return r.indent + res.plugin + ": " + formatStatus(res)
 }
 
-func (r *reporter) formatStatus(res result) string {
+func formatStatus(res result) string {
 	if res.err != nil {
+		if res.movedTo != "" {
+			return "failed (after moving to " + res.movedTo + "/)"
+		}
+
 		return "failed"
 	}
 
@@ -118,17 +133,17 @@ func (r *reporter) formatStatus(res result) string {
 	case removed:
 		return "removed"
 	case reinstalled:
-		return r.formatReinstalled(res)
+		return formatReinstalled(res)
 	case updated:
-		return r.formatUpdated(res)
+		return formatUpdated(res)
 	case unchanged:
-		return r.formatUnchanged(res)
+		return formatUnchanged(res)
 	default:
 		panic(fmt.Sprintf("unreachable: invalid status %d", res.status))
 	}
 }
 
-func (r *reporter) formatReinstalled(res result) string {
+func formatReinstalled(res result) string {
 	if res.reason != "" {
 		return "reinstalled (" + res.reason + ")"
 	}
@@ -136,7 +151,7 @@ func (r *reporter) formatReinstalled(res result) string {
 	return "reinstalled"
 }
 
-func (r *reporter) formatUpdated(res result) string {
+func formatUpdated(res result) string {
 	if res.movedTo != "" {
 		return "updated and moved to " + res.movedTo + "/"
 	}
@@ -144,7 +159,7 @@ func (r *reporter) formatUpdated(res result) string {
 	return "updated"
 }
 
-func (r *reporter) formatUnchanged(res result) string {
+func formatUnchanged(res result) string {
 	// Case 1: the plugin was moved.
 	if res.movedTo != "" {
 		msg := "moved to " + res.movedTo + "/"

@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -42,11 +42,10 @@ func cmdFrom(name, version string, args []string) (*cmdEnv, error) {
 	og.Bool(&cmd.versionWanted, "version")
 	og.Bool(&cmd.versionWanted, "V")
 
-	if err := og.Parse(args); err != nil {
+	if err := og.ParseAll(args); err != nil {
 		return nil, fmt.Errorf("argument parsing error: %w", err)
 	}
 
-	// Return early (and without error) for help or version.
 	if cmd.helpWanted {
 		fmt.Print(cmdUsage)
 		return cmd, nil
@@ -97,7 +96,7 @@ func (cmd *cmdEnv) loadConfig() (config, error) {
 		return cfg, fmt.Errorf("cannot read config %q: %w", cmd.confFile, err)
 	}
 
-	if err := json.Unmarshal(conf, &cfg); err != nil {
+	if err := json.Unmarshal(conf, &cfg, json.RejectUnknownMembers(true)); err != nil {
 		return cfg, fmt.Errorf("cannot parse config %q: %w", cmd.confFile, err)
 	}
 
@@ -105,14 +104,20 @@ func (cmd *cmdEnv) loadConfig() (config, error) {
 }
 
 func (cmd *cmdEnv) setupDirs(dataDirParts []string) error {
-	// Substitute HOME in dataDir if present.
-	if len(dataDirParts) >= 1 && dataDirParts[0] == "HOME" {
-		dataDirParts[0] = cmd.homeDir
+	// Substitute user's home directory for "HOME" or "~" at the start of dataDir.
+	if len(dataDirParts) > 0 {
+		switch dataDirParts[0] {
+		case "HOME", "~":
+			dataDirParts[0] = cmd.homeDir
+		}
 	}
 
 	cmd.dataDir = filepath.Join(dataDirParts...)
 	if cmd.dataDir == "" {
 		return errors.New("dataDir is required in configuration")
+	}
+	if !filepath.IsAbs(cmd.dataDir) {
+		return fmt.Errorf("dataDir must be an absolute path: %q", cmd.dataDir)
 	}
 
 	cmd.startDir = filepath.Join(cmd.dataDir, "start")
@@ -121,37 +126,56 @@ func (cmd *cmdEnv) setupDirs(dataDirParts []string) error {
 	return nil
 }
 
-// filterPlugins drops any plugins that lack a name, URL, or branch.
+// filterPlugins drops plugins that lack a name, URL, or branch. It also drops
+// those that have an invalid name or that repeat another plugin's name.
 func (cmd *cmdEnv) filterPlugins(plugins []pluginSpec) []pluginSpec {
+	seen := make(map[string]bool, len(plugins))
 	i := 0
 	for _, pSpec := range plugins {
-		if pSpec.Name == "" {
-			if pSpec.URL != "" {
-				fmt.Fprintf(os.Stderr, "%s: skipping plugin with URL %q: missing name\n", cmd.name, pSpec.URL)
-			} else {
-				fmt.Fprintf(os.Stderr, "%s: skipping plugin: missing name and URL\n", cmd.name)
+		if problem := specProblem(pSpec, seen); problem != "" {
+			switch {
+			case pSpec.Name != "":
+				fmt.Fprintf(os.Stderr, "%s: skipping plugin %q: %s\n", cmd.name, pSpec.Name, problem)
+			case pSpec.URL != "":
+				fmt.Fprintf(os.Stderr, "%s: skipping plugin with URL %q: %s\n", cmd.name, pSpec.URL, problem)
+			default:
+				fmt.Fprintf(os.Stderr, "%s: skipping plugin: %s\n", cmd.name, problem)
 			}
 
 			continue
 		}
 
-		if pSpec.URL == "" {
-			fmt.Fprintf(os.Stderr, "%s: skipping plugin %q: missing URL\n", cmd.name, pSpec.Name)
-
-			continue
-		}
-
-		if pSpec.Branch == "" {
-			fmt.Fprintf(os.Stderr, "%s: skipping plugin %q: missing branch\n", cmd.name, pSpec.Name)
-
-			continue
-		}
-
+		seen[pSpec.Name] = true
 		plugins[i] = pSpec
 		i++
 	}
 
 	return plugins[:i]
+}
+
+// specProblem returns why a plugin spec is unusable, or "" if it is usable.
+func specProblem(pSpec pluginSpec, seen map[string]bool) string {
+	switch {
+	case pSpec.Name == "" && pSpec.URL == "":
+		return "missing name and URL"
+	case pSpec.Name == "":
+		return "missing name"
+	case !isValidName(pSpec.Name):
+		return "name must be a single directory name"
+	case seen[pSpec.Name]:
+		return "duplicate name"
+	case pSpec.URL == "":
+		return "missing URL"
+	case pSpec.Branch == "":
+		return "missing branch"
+	default:
+		return ""
+	}
+}
+
+// isValidName reports whether name can safely be a plugin's directory name.
+func isValidName(name string) bool {
+	return name != "." && filepath.IsLocal(name) && filepath.Base(name) == name
 }
 
 // pluginPath returns the full path where a plugin should be installed.

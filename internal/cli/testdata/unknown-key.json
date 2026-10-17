@@ -1,0 +1,13 @@
+{
+    "dataDir": [
+        "HOME"
+    ],
+    "plugins": [
+        {
+            "branch": "main",
+            "name": "test.git",
+            "pinned": true,
+            "url": "https://github.com/user/test.git"
+        }
+    ]
+}

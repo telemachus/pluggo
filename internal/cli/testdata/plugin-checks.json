@@ -22,6 +22,16 @@
             "branch": "main",
             "name": "plugin.git",
             "url": "https://github.com/user/plugin.git"
+        },
+        {
+            "branch": "dev",
+            "name": "plugin.git",
+            "url": "https://github.com/other/plugin.git"
+        },
+        {
+            "branch": "main",
+            "name": "../escape.git",
+            "url": "https://github.com/user/escape.git"
         }
     ]
 }
