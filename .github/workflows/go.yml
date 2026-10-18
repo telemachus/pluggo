@@ -1,9 +1,11 @@
-name: pluggone
+name: pluggo
 on:
   push:
     branches:
       - '**'
   pull_request:
+    branches:
+      - '**'
 
 jobs:
   test:
@@ -15,10 +17,11 @@ jobs:
           - ubuntu-latest
           - macos-latest
         go: ['1.27.x']
-    name: pluggone test (using go ${{ matrix.go }} on ${{ matrix.os }})
+    name: pluggo test (using go ${{ matrix.go }} on ${{ matrix.os }})
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
-      - run: make test
+          check-latest: true
+      - run: make testr

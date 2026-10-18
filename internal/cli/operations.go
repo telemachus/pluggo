@@ -31,7 +31,7 @@ func (cmd *cmdEnv) move(pState *pluginState, pSpec pluginSpec) (string, error) {
 	}
 
 	if err := os.Rename(pState.directory, targetPath); err != nil {
-		return "", err
+		return "", err //nolint:wrapcheck // os.Rename's error names both paths.
 	}
 
 	// Update state with new location.

@@ -29,7 +29,7 @@ Pluggo supports Unix-like operating systems.
 To install, run the following command.
 
 ```shell
-go install github.com/telemachus/pluggo@latest
+go install github.com/telemachus/pluggo/cmd/pluggo@main
 ```
 
 You can also [download the source code][pluggo] and install it locally by

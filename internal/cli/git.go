@@ -31,7 +31,7 @@ func runGit(ctx context.Context, args ...string) ([]byte, error) {
 		}
 	}
 
-	return output, err
+	return output, err //nolint:wrapcheck // Exec errors name git, and callers add context.
 }
 
 func lastLine(data []byte) string {
@@ -91,12 +91,12 @@ var errDetachedHead = errors.New("repository is in detached HEAD state")
 // digest represents a git commit SHA-1 hash.
 type digest []byte
 
-func (d digest) equals(other digest) bool {
-	return bytes.Equal(d, other)
-}
-
 func (d digest) String() string {
 	return string(d)
+}
+
+func (d digest) equals(other digest) bool {
+	return bytes.Equal(d, other)
 }
 
 type branchInfo struct {
@@ -168,7 +168,7 @@ func getBranchRef(repoDir string) (string, error) {
 	headFile := filepath.Join(repoDir, ".git", "HEAD")
 	data, err := os.ReadFile(headFile)
 	if err != nil {
-		return "", err
+		return "", err //nolint:wrapcheck // The *os.PathError names the file.
 	}
 
 	ref, found := bytes.CutPrefix(data, []byte("ref: "))
@@ -182,7 +182,7 @@ func getBranchRef(repoDir string) (string, error) {
 func readDigest(filename string) (digest, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, err
+		return nil, err //nolint:wrapcheck // The *os.PathError names the file.
 	}
 
 	return digest(bytes.TrimSpace(data)), nil

@@ -15,23 +15,29 @@ linters:
     - errorlint
     - exhaustive
     - exptostd
+    - funcorder
     - funlen
     - gocheckcompilerdirectives
     - goconst
     - gocritic
     - godoclint
-    - gosec
+    - godot
     - govet
     - iface
+    - importas
+    - inamedparam
     - ineffassign
+    - interfacebloat
     - intrange
     - ireturn
     - maintidx
     - makezero
     - mirror
     - misspell
+    - modernize
     - nakedret
     - nestif
+    - nilerr
     - nlreturn
     - nolintlint
     - nonamedreturns
@@ -39,6 +45,7 @@ linters:
     - perfsprint
     - prealloc
     - predeclared
+    - reassign
     - recvcheck
     - thelper
     - tparallel
@@ -47,8 +54,18 @@ linters:
     - unused
     - usestdlibvars
     - usetesting
+    - varnamelen
     - wastedassign
     - whitespace
+    - wrapcheck
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - funlen
+          - goconst
+          - wrapcheck
   settings:
     copyloopvar:
       check-alias: true
@@ -63,20 +80,23 @@ linters:
           deny:
             - pkg: reflect
               desc: avoid reflect
-        test:
-          files:
-            - $all
-          deny:
-            - pkg: reflect
-              desc: avoid reflect
+            - pkg: math/rand
+              desc: use crypto/rand
+            - pkg: math/rand/v2
+              desc: use crypto/rand
     errcheck:
       check-type-assertions: true
       check-blank: true
       exclude-functions:
+        - errors.AsType
+        - fmt.Print
         - fmt.Printf
         - fmt.Println
+        - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+        - strings.Builder.WriteString
+        - strings.Builder.WriteRune
     exhaustive:
       default-signifies-exhaustive: true
     goconst:
@@ -92,12 +112,6 @@ linters:
         - opinionated
         - performance
         - style
-    gosec:
-      excludes:
-        - G104 # Don't let gosec check for unhandled errors.
-        - G204 # Subprocesses run git directly, not via a shell.
-        - G301 # 755 for a directory is fine.
-        - G304 # The file variable comes from the user's configuration.
     govet:
       enable-all: true
     nlreturn:
@@ -105,6 +119,11 @@ linters:
     nolintlint:
       require-explanation: true
       require-specific: true
+    varnamelen:
+      max-distance: 10
+      min-name-length: 2
+      ignore-decls:
+        - i int
 formatters:
   exclusions:
     generated: lax
