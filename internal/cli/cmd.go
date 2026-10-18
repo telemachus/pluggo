@@ -4,6 +4,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,8 @@ import (
 )
 
 type cmdEnv struct {
+	stdout        io.Writer
+	stderr        io.Writer
 	homeDir       string
 	name          string
 	version       string
@@ -28,8 +31,10 @@ type cmdEnv struct {
 	versionWanted bool
 }
 
-func cmdFrom(name, version string, args []string) (*cmdEnv, error) {
+func cmdFrom(name, version string, args []string, stdout, stderr io.Writer) (*cmdEnv, error) {
 	cmd := &cmdEnv{
+		stdout:  stdout,
+		stderr:  stderr,
 		name:    name,
 		version: version,
 	}
@@ -48,11 +53,11 @@ func cmdFrom(name, version string, args []string) (*cmdEnv, error) {
 	}
 
 	if cmd.helpWanted {
-		fmt.Print(cmdUsage)
+		fmt.Fprint(cmd.stdout, cmdUsage)
 		return cmd, nil
 	}
 	if cmd.versionWanted {
-		fmt.Printf("%s %s\n", cmd.name, cmd.version)
+		fmt.Fprintf(cmd.stdout, "%s %s\n", cmd.name, cmd.version)
 		return cmd, nil
 	}
 
@@ -141,11 +146,11 @@ func (cmd *cmdEnv) filterPlugins(plugins []pluginSpec) []pluginSpec {
 		if problem := specProblem(pSpec, seen); problem != "" {
 			switch {
 			case pSpec.Name != "":
-				fmt.Fprintf(os.Stderr, "%s: skipping plugin %q: %s\n", cmd.name, pSpec.Name, problem)
+				fmt.Fprintf(cmd.stderr, "%s: skipping plugin %q: %s\n", cmd.name, pSpec.Name, problem)
 			case pSpec.URL != "":
-				fmt.Fprintf(os.Stderr, "%s: skipping plugin with URL %q: %s\n", cmd.name, pSpec.URL, problem)
+				fmt.Fprintf(cmd.stderr, "%s: skipping plugin with URL %q: %s\n", cmd.name, pSpec.URL, problem)
 			default:
-				fmt.Fprintf(os.Stderr, "%s: skipping plugin: %s\n", cmd.name, problem)
+				fmt.Fprintf(cmd.stderr, "%s: skipping plugin: %s\n", cmd.name, problem)
 			}
 
 			continue
@@ -197,7 +202,7 @@ func (cmd *cmdEnv) pluginPath(pSpec pluginSpec) string {
 func (cmd *cmdEnv) warnf(format string, args ...any) {
 	cmd.warnings.Add(1)
 	if cmd.debugWanted {
-		fmt.Fprintf(os.Stderr, format+"\n", args...)
+		fmt.Fprintf(cmd.stderr, format+"\n", args...)
 	}
 }
 

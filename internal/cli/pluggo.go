@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 )
@@ -14,11 +15,12 @@ const (
 	confFile   = ".pluggo.json"
 )
 
-// Pluggo runs the plugin manager and returns success or failure to the shell.
-func Pluggo(args []string) int {
-	cmd, err := cmdFrom(cmdName, cmdVersion, args)
+// Pluggo runs the plugin manager, writing output to stdout and errors to
+// stderr, and returns success or failure to the shell.
+func Pluggo(args []string, stdout, stderr io.Writer) int {
+	cmd, err := cmdFrom(cmdName, cmdVersion, args, stdout, stderr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmdName, err)
+		fmt.Fprintf(stderr, "%s: %s\n", cmdName, err)
 		return 1
 	}
 
@@ -32,12 +34,12 @@ func Pluggo(args []string) int {
 
 	plugins, err := cmd.plugins()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmdName, err)
+		fmt.Fprintf(cmd.stderr, "%s: %s\n", cmdName, err)
 		return 1
 	}
 
 	if err := cmd.process(ctx, plugins); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", cmdName, err)
+		fmt.Fprintf(cmd.stderr, "%s: %s\n", cmdName, err)
 		return 1
 	}
 
@@ -49,7 +51,7 @@ func Pluggo(args []string) int {
 }
 
 func (cmd *cmdEnv) process(ctx context.Context, pSpecs []pluginSpec) error {
-	rep := newReporter("    ", cmd.quietWanted, cmd.debugWanted)
+	rep := newReporter(cmd.stdout, cmd.stderr, "    ", cmd.quietWanted, cmd.debugWanted)
 
 	if err := cmd.sync(ctx, pSpecs, rep); err != nil {
 		return err

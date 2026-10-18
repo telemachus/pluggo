@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -16,6 +17,8 @@ func makePlugins() []pluginSpec {
 
 func fakeCmdEnv(confFile string) *cmdEnv {
 	return &cmdEnv{
+		stdout:   io.Discard,
+		stderr:   io.Discard,
 		name:     "test",
 		confFile: confFile,
 		homeDir:  "/tmp/test-home",

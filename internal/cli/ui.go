@@ -12,13 +12,15 @@ import (
 
 // spinner provides animated feedback during long operations.
 type spinner struct {
+	w      io.Writer
 	stopCh chan struct{}
 	frames []string
 	done   sync.WaitGroup
 }
 
-func newSpinner() *spinner {
+func newSpinner(w io.Writer) *spinner {
 	return &spinner{
+		w:      w,
 		frames: []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
 		stopCh: make(chan struct{}),
 	}
@@ -32,10 +34,10 @@ func (s *spinner) start(message string) {
 			select {
 			case <-s.stopCh:
 				// Clear the line.
-				fmt.Fprint(os.Stderr, "\r\033[K")
+				fmt.Fprint(s.w, "\r\033[K")
 				return
 			case <-tick:
-				fmt.Fprintf(os.Stderr, "\r%s %s", s.frames[frame], message)
+				fmt.Fprintf(s.w, "\r%s %s", s.frames[frame], message)
 				frame = (frame + 1) % len(s.frames)
 			}
 		}
@@ -58,8 +60,11 @@ func isTerminal(w io.Writer) bool {
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
-// reporter handles progress display and result formatting.
+// reporter handles progress display and result formatting. Results go to
+// stdout, and the spinner goes to stderr.
 type reporter struct {
+	stdout        io.Writer
+	stderr        io.Writer
 	spinner       *spinner
 	indent        string
 	quietWanted   bool
@@ -68,17 +73,19 @@ type reporter struct {
 
 // newReporter returns a reporter. The spinner appears only on a terminal, and
 // not in quiet mode or in debug mode, where warnings would garble it.
-func newReporter(indent string, quietWanted, debugWanted bool) *reporter {
+func newReporter(stdout, stderr io.Writer, indent string, quietWanted, debugWanted bool) *reporter {
 	return &reporter{
+		stdout:        stdout,
+		stderr:        stderr,
 		indent:        indent,
 		quietWanted:   quietWanted,
-		spinnerWanted: !quietWanted && !debugWanted && isTerminal(os.Stderr),
+		spinnerWanted: !quietWanted && !debugWanted && isTerminal(stderr),
 	}
 }
 
 func (r *reporter) start(banner string) {
 	if r.spinnerWanted {
-		r.spinner = newSpinner()
+		r.spinner = newSpinner(r.stderr)
 		r.spinner.start(banner)
 	}
 }
@@ -102,14 +109,14 @@ func (r *reporter) finish(results []result) {
 
 func (r *reporter) printFull(results []result) {
 	for _, res := range results {
-		fmt.Println(r.formatResult(res))
+		fmt.Fprintln(r.stdout, r.formatResult(res))
 	}
 }
 
 func (r *reporter) printErrorsOnly(results []result) {
 	for _, res := range results {
 		if res.err != nil {
-			fmt.Printf("%sfailed: %s\n", r.indent, res.plugin)
+			fmt.Fprintf(r.stdout, "%sfailed: %s\n", r.indent, res.plugin)
 		}
 	}
 }

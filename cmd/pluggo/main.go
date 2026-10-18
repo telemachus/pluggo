@@ -8,5 +8,5 @@ import (
 )
 
 func main() {
-	os.Exit(cli.Pluggo(os.Args[1:]))
+	os.Exit(cli.Pluggo(os.Args[1:], os.Stdout, os.Stderr))
 }
